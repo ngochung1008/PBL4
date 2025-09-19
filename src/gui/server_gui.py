@@ -1,128 +1,120 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
-    QPushButton, QLabel, QListWidget, QSplitter, QTextEdit, QFrame
+    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
+    QHBoxLayout, QFrame, QSizePolicy, QSpacerItem
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
+
+from ui_components import DARK_BG, create_back_button  # ✅ import hàm back button
+
+# Bảng màu
+SPOTIFY_GREEN = "#1DB954"
+CARD_BG = "#181818"
+TEXT_LIGHT = "#FFFFFF"
 
 
-class ClientMonitor(QWidget):
+class ServerWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Client Monitor")
-        self.resize(900, 500)
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #150028;
-                color: #A9FFD9;
-                font-family: Consolas, monospace;
+        self.resize(1000, 600)
+        self.setMinimumSize(800, 450)
+        self.setStyleSheet(f"background-color: {DARK_BG}; color: {TEXT_LIGHT};")
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(30, 20, 30, 20)
+        main_layout.setSpacing(20)
+
+        # ----------------- Thanh top -----------------
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(10)
+
+        # ✅ Back button dùng ui_components
+        self.btn_back = create_back_button()
+        top_layout.addWidget(self.btn_back, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # Username & IP
+        lbl_info = QLabel("ServerUser  |  192.168.1.100")
+        lbl_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_info.setStyleSheet("font-size: 18px; font-weight: bold;")
+        top_layout.addStretch()
+        top_layout.addWidget(lbl_info)
+        top_layout.addStretch()
+
+        # Profile button
+        self.btn_profile = QPushButton("Profile")
+        self.btn_profile.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_profile.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {SPOTIFY_GREEN};
+                color: {DARK_BG};
+                font-weight: bold;
                 font-size: 14px;
-            }
-            QPushButton {
-                background-color: #30CFAF;
-                color: #0A0020;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #25b597;
-            }
-            QLineEdit {
-                background-color: #30CFAF;
-                color: #0A0020;
-                border-radius: 6px;
-                padding: 4px;
-            }
-            QListWidget {
-                background-color: #0A0020;
-                border: 1px solid #30CFAF;
-                border-radius: 6px;
-            }
-            QTextEdit {
-                background-color: #0A0020;
-                border: 1px solid #30CFAF;
-                border-radius: 6px;
-                color: #A9FFD9;
-            }
-            QLabel {
-                font-weight: bold;
-            }
+                padding: 6px 16px;
+                border-radius: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: #1ed760;
+            }}
         """)
+        top_layout.addWidget(self.btn_profile, alignment=Qt.AlignmentFlag.AlignRight)
 
-        # Layout chính chia 2
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addLayout(top_layout)
 
-        # ======= Khung bên trái: List of clients =======
-        left_frame = QFrame()
-        left_layout = QVBoxLayout()
+        # Spacer đẩy phần dưới xuống giữa
+        main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
-        lbl_list = QLabel("List of clients")
-        search_box = QLineEdit()
-        search_box.setPlaceholderText("Search...")
+        # ----------------- Container Options -----------------
+        container = QFrame()
+        container.setStyleSheet(f"""
+            background-color: {CARD_BG};
+            border-radius: 14px;
+        """)
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(40, 40, 40, 40)
+        container_layout.setSpacing(25)
+        container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.client_list = QListWidget()
-        self.client_list.addItem("Name: PC1 | IP: 192.168.1.2 | State: 1")
-        self.client_list.addItem("Name: PC2 | IP: 192.168.1.3 | State: 0")
+        # Tiêu đề trong container
+        lbl_options = QLabel("Server Options")
+        lbl_options.setStyleSheet("font-size: 20px; font-weight: bold;")
+        lbl_options.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(lbl_options)
 
-        left_layout.addWidget(lbl_list)
-        left_layout.addWidget(search_box)
-        left_layout.addWidget(self.client_list)
-        left_frame.setLayout(left_layout)
+        # Các nút lựa chọn
+        self.btn_control = QPushButton("Control")
+        self.btn_manage_screen = QPushButton("Manage All Screen")
+        self.btn_manage_clients = QPushButton("Manage Clients")
 
-        # ======= Khung bên phải: chi tiết =======
-        right_frame = QFrame()
-        right_layout = QVBoxLayout()
+        for btn in [self.btn_control, self.btn_manage_screen, self.btn_manage_clients]:
+            btn.setFixedHeight(45)
+            btn.setFixedWidth(300)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {SPOTIFY_GREEN};
+                    color: {DARK_BG};
+                    font-size: 16px;
+                    font-weight: bold;
+                    border-radius: 10px;
+                }}
+                QPushButton:hover {{
+                    background-color: #1ed760;
+                }}
+            """)
+            container_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        # IP + More info
-        top_info = QHBoxLayout()
-        self.ip_field = QLineEdit()
-        self.ip_field.setPlaceholderText("IP ...............")
-        more_info = QLineEdit()
-        more_info.setPlaceholderText("More info: ............................")
+        main_layout.addWidget(container, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        top_info.addWidget(self.ip_field, 2)
-        top_info.addWidget(more_info, 3)
-
-        # Các nút Control
-        btn_layout = QHBoxLayout()
-        btn_control = QPushButton("Control")
-        btn_key = QPushButton("View keystroke")
-        btn_screen = QPushButton("View screen")
-        btn_history = QPushButton("History")
-        btn_layout.addWidget(btn_control)
-        btn_layout.addWidget(btn_key)
-        btn_layout.addWidget(btn_screen)
-        btn_layout.addWidget(btn_history)
-
-        # Màn hình chính
-        self.display_area = QTextEdit()
-        self.display_area.setPlaceholderText("Display area ...")
-
-        # Trạng thái
-        self.status_field = QLineEdit()
-        self.status_field.setPlaceholderText("Current status: .................")
-
-        # Gắn vào layout
-        right_layout.addLayout(top_info)
-        right_layout.addLayout(btn_layout)
-        right_layout.addWidget(self.display_area)
-        right_layout.addWidget(self.status_field)
-        right_frame.setLayout(right_layout)
-
-        # Thêm vào splitter
-        splitter.addWidget(left_frame)
-        splitter.addWidget(right_frame)
-        splitter.setSizes([200, 600])
-
-        # Layout chính
-        main_layout = QHBoxLayout()
-        main_layout.addWidget(splitter)
-        self.setLayout(main_layout)
+        # Spacer dưới để căn giữa container
+        main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    win = ClientMonitor()
+    app.setFont(QFont("Segoe UI", 10))
+    win = ServerWindow()
     win.show()
     sys.exit(app.exec())
