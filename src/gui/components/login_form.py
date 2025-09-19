@@ -13,21 +13,18 @@ class LoginForm(QWidget):
         self.setFixedSize(400, 300)
         self.setStyleSheet("""
             QWidget {
-                background-color: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:1,
-                    stop:0 pink, stop:1 black
-                );
+                background-color: #00203F;
                 font-family: "Segoe UI";
             }
             QLineEdit {
                 border: 2px solid #dcdcdc;
                 border-radius: 20px;
                 padding: 10px 40px;
-                background: pink;
+                background: #ADEFD1;
                 font-size: 14px;
             }
             QPushButton {
-                background-color: pink;
+                background-color: #ADEFD1;
                 border-radius: 20px;
                 padding: 10px;
                 color: white;

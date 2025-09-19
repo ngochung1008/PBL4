@@ -1,95 +1,128 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QTextEdit, QLineEdit, QSplitter, QFrame
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
+    QPushButton, QLabel, QListWidget, QSplitter, QTextEdit, QFrame
 )
 from PyQt6.QtCore import Qt
 
 
-class MainWindow(QWidget):
+class ClientMonitor(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Client Manager")
+        self.setWindowTitle("Client Monitor")
         self.resize(900, 500)
         self.setStyleSheet("""
-        QWidget {
-            background-color: #00203F;   
-            font-family: "Segoe UI";
-        }
-        QLineEdit, QPushButton, QListWidget, QTextEdit {
-            background-color: #ADEFD1;   
-        }
+            QWidget {
+                background-color: #150028;
+                color: #A9FFD9;
+                font-family: Consolas, monospace;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #30CFAF;
+                color: #0A0020;
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #25b597;
+            }
+            QLineEdit {
+                background-color: #30CFAF;
+                color: #0A0020;
+                border-radius: 6px;
+                padding: 4px;
+            }
+            QListWidget {
+                background-color: #0A0020;
+                border: 1px solid #30CFAF;
+                border-radius: 6px;
+            }
+            QTextEdit {
+                background-color: #0A0020;
+                border: 1px solid #30CFAF;
+                border-radius: 6px;
+                color: #A9FFD9;
+            }
+            QLabel {
+                font-weight: bold;
+            }
         """)
-        # Layout chính
-        main_layout = QHBoxLayout(self)
 
-        # ======= Panel bên trái: List of clients =======
-        left_panel = QFrame()
-        left_layout = QVBoxLayout(left_panel)
+        # Layout chính chia 2
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # ======= Khung bên trái: List of clients =======
+        left_frame = QFrame()
+        left_layout = QVBoxLayout()
 
         lbl_list = QLabel("List of clients")
-        lbl_list.setStyleSheet("font-weight: bold; font-size: 16px; color: #00ffcc;")
-        left_layout.addWidget(lbl_list)
+        search_box = QLineEdit()
+        search_box.setPlaceholderText("Search...")
 
         self.client_list = QListWidget()
-        # Thêm dữ liệu mẫu
-        item1 = QListWidgetItem("Name: Client1\nIP: 192.168.1.2   State: 1")
-        item2 = QListWidgetItem("Name: Client2\nIP: 192.168.1.3   State: 0")
-        self.client_list.addItem(item1)
-        self.client_list.addItem(item2)
+        self.client_list.addItem("Name: PC1 | IP: 192.168.1.2 | State: 1")
+        self.client_list.addItem("Name: PC2 | IP: 192.168.1.3 | State: 0")
+
+        left_layout.addWidget(lbl_list)
+        left_layout.addWidget(search_box)
         left_layout.addWidget(self.client_list)
+        left_frame.setLayout(left_layout)
 
-        # ======= Panel bên phải: Thông tin client =======
-        right_panel = QFrame()
-        right_layout = QVBoxLayout(right_panel)
+        # ======= Khung bên phải: chi tiết =======
+        right_frame = QFrame()
+        right_layout = QVBoxLayout()
 
-        # Hàng trên: IP và More info
-        top_info_layout = QHBoxLayout()
-        self.txt_ip = QLineEdit()
-        self.txt_ip.setPlaceholderText("IP .................")
-        self.txt_ip.setFixedHeight(30)
+        # IP + More info
+        top_info = QHBoxLayout()
+        self.ip_field = QLineEdit()
+        self.ip_field.setPlaceholderText("IP ...............")
+        more_info = QLineEdit()
+        more_info.setPlaceholderText("More info: ............................")
 
-        self.txt_info = QLineEdit()
-        self.txt_info.setPlaceholderText("More info: ..................")
-        self.txt_info.setFixedHeight(30)
+        top_info.addWidget(self.ip_field, 2)
+        top_info.addWidget(more_info, 3)
 
-        top_info_layout.addWidget(self.txt_ip)
-        top_info_layout.addWidget(self.txt_info)
-        right_layout.addLayout(top_info_layout)
+        # Các nút Control
+        btn_layout = QHBoxLayout()
+        btn_control = QPushButton("Control")
+        btn_key = QPushButton("View keystroke")
+        btn_screen = QPushButton("View screen")
+        btn_history = QPushButton("History")
+        btn_layout.addWidget(btn_control)
+        btn_layout.addWidget(btn_key)
+        btn_layout.addWidget(btn_screen)
+        btn_layout.addWidget(btn_history)
 
-        # Hàng nút
-        button_layout = QHBoxLayout()
-        self.btn_control = QPushButton("Control")
-        self.btn_keystroke = QPushButton("View keystroke")
-        self.btn_screen = QPushButton("View screen")
-        self.btn_history = QPushButton("History")
-
-        for btn in [self.btn_control, self.btn_keystroke, self.btn_screen, self.btn_history]:
-            btn.setFixedHeight(35)
-            button_layout.addWidget(btn)
-
-        right_layout.addLayout(button_layout)
-
-        # Vùng hiển thị (có thể phóng to)
+        # Màn hình chính
         self.display_area = QTextEdit()
-        self.display_area.setPlaceholderText("Hiển thị dữ liệu ở đây...")
-        right_layout.addWidget(self.display_area, stretch=1)
+        self.display_area.setPlaceholderText("Display area ...")
 
-        # Status bar
-        self.lbl_status = QLabel("Current status: ................")
-        right_layout.addWidget(self.lbl_status)
+        # Trạng thái
+        self.status_field = QLineEdit()
+        self.status_field.setPlaceholderText("Current status: .................")
 
-        # ======= Splitter để kéo dãn =======
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(left_panel)
-        splitter.addWidget(right_panel)
+        # Gắn vào layout
+        right_layout.addLayout(top_info)
+        right_layout.addLayout(btn_layout)
+        right_layout.addWidget(self.display_area)
+        right_layout.addWidget(self.status_field)
+        right_frame.setLayout(right_layout)
+
+        # Thêm vào splitter
+        splitter.addWidget(left_frame)
+        splitter.addWidget(right_frame)
         splitter.setSizes([200, 600])
 
+        # Layout chính
+        main_layout = QHBoxLayout()
         main_layout.addWidget(splitter)
+        self.setLayout(main_layout)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    win = MainWindow()
+    win = ClientMonitor()
     win.show()
     sys.exit(app.exec())
