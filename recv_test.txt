@@ -1,0 +1,31 @@
+import socket
+import struct
+import os
+
+HOST = "127.0.0.1"
+PORT = 5000
+
+def pack_field(data: bytes) -> bytes:
+    return struct.pack("!I", len(data)) + data
+
+def send_login(username, password):
+    payload = pack_field(username.encode()) + pack_field(password.encode())
+    header = struct.pack("!B", 1)  # type = 1
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        s.sendall(header + payload)
+        print("Server:", s.recv(1024).decode())
+
+def send_file(filename):
+    with open(filename, "rb") as f:
+        filedata = f.read()
+    payload = pack_field(filename.encode()) + struct.pack("!I", len(filedata)) + filedata
+    header = struct.pack("!B", 2)  # type = 2
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        s.sendall(header + payload)
+        print("Server:", s.recv(1024).decode())
+
+if __name__ == "__main__":
+    send_login("huy", "123456")
+    send_file("test.txt")

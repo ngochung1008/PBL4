@@ -1,89 +1,68 @@
 import socket
-import threading
 import struct
-import os
 
-HOST = '10.10.30.31'
+HOST = "10.10.30.15"   # IP của server (chạy local thì giữ nguyên)
 PORT = 5000
 
-def receive_messages(sock):
-    """Luồng nhận dữ liệu từ server"""
-    while True:
-        try:
-            # Nhận loại dữ liệu
-            header = sock.recv(4)
-            if not header:
-                break
-            data_type = struct.unpack('!I', header)[0]
+def send_message(conn, msg_type, *fields):
+    parts = []
+    parts.append(struct.pack("!B", msg_type))  # 1 byte msg_type
+    for field in fields:
+        if isinstance(field, str):
+            field = field.encode("utf-8")  # chuyển str -> bytes
+        parts.append(struct.pack("!I", len(field)))  # 4 byte độ dài
+        parts.append(field)  # nội dung
+    conn.sendall(b"".join(parts))
 
-            if data_type == 1:  # Tin nhắn text
-                msg_len = struct.unpack('!I', sock.recv(4))[0]
-                msg = sock.recv(msg_len).decode()
-                print("\n" + msg)
+def recv_exact(conn, n):
+    data = b""
+    while len(data) < n:
+        chunk = conn.recv(n - len(data))
+        if not chunk:
+            raise ConnectionError("Mat ket noi server")
+        data += chunk
+    return data
 
-            elif data_type == 2:  # File
-                name_len = struct.unpack('!I', sock.recv(4))[0]
-                file_name = sock.recv(name_len).decode()
-                file_size = struct.unpack('!Q', sock.recv(8))[0]
+def read_field(conn):
+    """Đọc 1 field: [len(4B)][data]"""
+    (length,) = struct.unpack("!I", recv_exact(conn, 4))
+    data = recv_exact(conn, length)
+    return data
 
-                file_data = b''
-                while len(file_data) < file_size:
-                    chunk = sock.recv(4096)
-                    if not chunk:
-                        break
-                    file_data += chunk
+def handle_login(conn):
+    username = read_field(conn).decode("utf-8")
+    return f"Hello {username}".encode("utf-8")
 
-                # Lưu file nhận được
-                save_path = "received_" + file_name
-                with open(save_path, "wb") as f:
-                    f.write(file_data)
+def client_login(username, password):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        print(f"[+] Ket noi toi server {HOST}:{PORT}")
 
-                print(f"\n[ĐÃ NHẬN FILE] {file_name} ({file_size} bytes) -> lưu tại {save_path}")
+        # while True:
+            # gửi tín hiệu đăng nhập: msg_type = 1
+        send_message(s, 1, username, password)
+        print("[>] Da gui yeu cau dang nhap")
 
-        except Exception as e:
-            print("Lỗi khi nhận:", e)
-            break
+        # nhận phản hồi
+        reply = s.recv(1)
+        reply = struct.unpack("!B", reply)[0]
 
-def send_text(sock, msg):
-    """Gửi tin nhắn văn bản"""
-    data = struct.pack('!I', 1) + struct.pack('!I', len(msg.encode())) + msg.encode()
-    sock.sendall(data)
+        if (reply == 1):
+            token = read_field(s).decode("utf-8")
+            print("[<] Dang nhap thanh cong"+token)
+        else:
+            print("[<] Dang nhap that bai")
+        
+        # user = input("Username: ")
+        # pw = input("Password: ")
 
-def send_file(sock, file_path):
-    """Gửi file"""
-    if not os.path.isfile(file_path):
-        print("[LỖI] Không tìm thấy file:", file_path)
-        return
-    file_name = os.path.basename(file_path)
-    file_size = os.path.getsize(file_path)
+        # # if not reply:
+        # #     print("[!] Server Khong tra loi")
+        # #     return
 
-    with open(file_path, "rb") as f:
-        file_data = f.read()
+        # print("[<] Phan hoi tu server:", reply)
 
-    data = (
-        struct.pack('!I', 2) +
-        struct.pack('!I', len(file_name.encode())) +
-        file_name.encode() +
-        struct.pack('!Q', file_size) +
-        file_data
-    )
-    sock.sendall(data)
-    print(f"[ĐÃ GỬI FILE] {file_name} ({file_size} bytes)")
-
-# Kết nối server
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((HOST, PORT))
-print("Kết nối thành công tới server!")
-
-# Luồng nhận tin nhắn/file
-threading.Thread(target=receive_messages, args=(client_socket,), daemon=True).start()
-
-# Vòng lặp nhập lệnh
-while True:
-    msg = input()
-    if msg.startswith("/file "):
-        # Gửi file: /file đường_dẫn
-        path = msg[6:].strip()
-        send_file(client_socket, path)
-    else:
-        send_text(client_socket, msg)
+if __name__ == "__main__":
+    user = input("Username: ")
+    pw = input("Password: ")
+    client_login(user, pw)
