@@ -1,7 +1,7 @@
 import socket
 import struct
 
-HOST = "10.10.30.15"   # IP của server (chạy local thì giữ nguyên)
+HOST = "10.10.30.157"   # IP của server (chạy local thì giữ nguyên)
 PORT = 5000
 
 def send_message(conn, msg_type, *fields):

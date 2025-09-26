@@ -2,6 +2,7 @@ import socket
 import threading
 import struct
 import auth
+import subprocess
 
 HOST = "0.0.0.0"
 PORT = 5000
@@ -43,7 +44,19 @@ def read_field(conn):
     data = recv_exact(conn, length)
     return data
 
-def handle_login(conn):
+def get_mac_from_ip(ip):
+    try:
+        # chạy lệnh arp để lấy MAC (chỉ hoạt động nếu client cùng mạng LAN)
+        output = subprocess.check_output(f"arp -a {ip}", shell=True).decode()
+        for line in output.splitlines():
+            if ip in line:
+                # lấy MAC trong dòng chứa ip
+                return line.split()[1].replace("-", ":")
+    except Exception:
+        pass
+    return None
+
+def handle_login(conn, addr):
     username = read_field(conn).decode("utf-8")
     password = read_field(conn).decode("utf-8")
     print(f"[LOGIN] {username}:{password}")
@@ -52,7 +65,7 @@ def handle_login(conn):
     if  (check == False):
         send_message(conn, 0)
     else:
-        token = auth.create_session(username)
+        token = auth.create_session(username, addr[0], get_mac_from_ip(addr[0]))
         print(f"[TOKEN] {token}")
         send_message(conn, 1, token)
 
@@ -81,7 +94,7 @@ def client_thread(conn, addr):
 
             if msg_type == 1:
                 print(f"[{addr}] Login request")
-                handle_login(conn)
+                handle_login(conn, addr)
             elif msg_type == 2:
                 reply = handle_file(conn)
             else:

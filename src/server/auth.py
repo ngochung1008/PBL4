@@ -60,33 +60,51 @@ def sign_up(username, password, fullname, email):
         cursor.close()
         conn.close()
 
-def create_session(user_id):
-    return "1234-5678-9012-3456"
-    ip, mac_ip = [1,2 ]
-    conn = mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="yourpassword",
-        database="yourdb"
-    )
-    cursor = conn.cursor()
+def create_session(user_name, ip, mac_ip):
+    try:
+        conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="root",
+            database="pbl4"
+        )
+        cursor = conn.cursor()
 
-    # chỉ insert UserID, Ip, MacIp
-    sql = """
-        INSERT INTO Session (UserID, Ip, MacIp)
-        VALUES (%s, %s, %s)
-    """
-    cursor.execute(sql, (user_id, ip, mac_ip))
-    conn.commit()
+        # 1. Lấy UserID theo Username
+        cursor.execute("SELECT UserID FROM Users WHERE Username = %s", (user_name,))
+        result = cursor.fetchone()
+        if not result:
+            raise ValueError("User không tồn tại")
 
-    # lấy SessionID vừa tạo (MySQL sinh ra UUID)
-    cursor.execute("SELECT SessionID FROM Session WHERE UserID=%s ORDER BY StartTime DESC LIMIT 1", (user_id,))
-    session_id = cursor.fetchone()[0]
+        user_id = result[0]
 
-    cursor.close()
-    conn.close()
-    return session_id
+        # 2. Insert Session (không cần SessionID, MySQL tự sinh)
+        cursor.execute("""
+            INSERT INTO Session (UserID, Ip, MacIp)
+            VALUES (%s, %s, %s)
+        """, (user_id, ip, mac_ip))
+        conn.commit()
+
+        # 3. Lấy lại SessionID vừa tạo (lấy record mới nhất của user này)
+        cursor.execute("""
+            SELECT SessionID FROM Session 
+            WHERE UserID = %s 
+            ORDER BY StartTime DESC 
+            LIMIT 1
+        """, (user_id,))
+        session_id = cursor.fetchone()[0]
+
+        return session_id
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return None
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
 
         
-print(sign_in("admin", "admin123"))
+# print(sign_in("admin", "admin123"))
 # print(sign_up("admin", "admin123", "Administrator", "admin@gmail.com"))
