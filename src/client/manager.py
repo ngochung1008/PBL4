@@ -1,17 +1,25 @@
-# manager.py
+import threading
 import socket
+from manager_input import ManagerInput
+from manager_viewer import ManagerViewer
 
-SERVER_HOST = "127.0.0.1"   # IP server
-SERVER_PORT = 9010          # cổng dành cho Manager
-
-def main():
-    with socket.create_connection((SERVER_HOST, SERVER_PORT)) as s:
-        print("Connected to server. Enter commands:")
-        while True:
-            cmd = input("> ")
-            if cmd.lower() == "exit":
-                break
-            s.sendall(cmd.encode("utf-8"))
+SERVER_HOST = "10.10.30.179"
+INPUT_PORT = 9012
+SCREEN_PORT = 5000
 
 if __name__ == "__main__":
-    main()
+    # Kết nối input
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind((SERVER_HOST, INPUT_PORT))
+    sock.listen(1)
+    print("[MANAGER] Waiting for client input connection...")
+    conn, addr = sock.accept()
+    print("[MANAGER] Client input connected:", addr)
+
+    # Input handler
+    input_handler = ManagerInput(conn)
+    threading.Thread(target=input_handler.run, daemon=True).start()
+
+    # Viewer handler
+    viewer = ManagerViewer(SERVER_HOST, SCREEN_PORT)
+    viewer.run()
