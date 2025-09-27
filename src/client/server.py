@@ -18,15 +18,15 @@ def handle_manager(conn, addr):
     print("[SERVER] Manager connected:", addr)
     try:
         while True:
-            cmd = conn.recv(1024).decode("utf-8")
-            if not cmd:
+            data = conn.recv(4096)
+            if not data:
                 break
-            print(f"[Manager] {cmd}")
-            # gửi lệnh cho tất cả client B
+            # dữ liệu Manager gửi là JSON string
+            msg = data.decode("utf-8")
+            # forward cho tất cả client
             for caddr, cconn in list(clients.items()):
                 try:
-                    cconn.sendall(cmd.encode("utf-8"))
-                    print(f"Sent to client {caddr}")
+                    cconn.sendall(msg.encode("utf-8"))
                 except:
                     pass
     finally:
