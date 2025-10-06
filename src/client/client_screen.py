@@ -26,12 +26,16 @@ class ClientScreen:
         while True:
             try:
                 with socket.create_connection((self.server_host, self.screen_port)) as s:
-                    print("[CLIENT SCREEN] Connected to screen server")
+                    # 🔥 gửi handshake báo đây là client
+                    s.sendall(b"CLNT:")
+                    print("[CLIENT SCREEN] Connected to screen server as Client")
+
                     while True:
                         start = time.time()
                         jpg = self.capture_jpeg_bytes()
                         length = struct.pack(">I", len(jpg))
                         s.sendall(length + jpg)
+
                         elapsed = time.time() - start
                         time.sleep(max(0, interval - elapsed))
             except Exception as e:

@@ -1,3 +1,5 @@
+# server.py
+
 import socket
 import threading
 import struct
@@ -5,11 +7,13 @@ import io
 import cv2
 import numpy as np
 from PIL import Image
+import threading
+from server_screen import ServerScreen   # import module screen
 
-CONTROL_PORT = 9010   # manager <-> client B (chuyển lệnh)
-SCREEN_PORT = 5000    # client B -> server (stream màn hình)
-
-clients = {}  # lưu client B {addr: conn}
+CONTROL_PORT = 9010   # Manager -> Server
+CLIENT_PORT = 9011    # Server -> Client
+SCREEN_PORT = 5000    # Client - Server (stream màn hình)
+clients = []  # list kết nối client (chỉ 1 hoặc nhiều)
 
 # ========================
 # SERVER CONTROL
@@ -21,42 +25,39 @@ def handle_manager(conn, addr):
             data = conn.recv(4096)
             if not data:
                 break
-            # dữ liệu Manager gửi là JSON string
-            msg = data.decode("utf-8")
             # forward cho tất cả client
-            for caddr, cconn in list(clients.items()):
+            for c in list(clients):
                 try:
-                    cconn.sendall(msg.encode("utf-8"))
+                    c.sendall(data)
                 except:
-                    pass
+                    clients.remove(c)
     finally:
         conn.close()
 
 def handle_client(conn, addr):
-    print("[SERVER] Client B connected:", addr)
-    clients[addr] = conn
+    print("[SERVER] Client connected:", addr)
+    clients.append(conn)
     try:
         while True:
             data = conn.recv(1024)
             if not data:
                 break
-            print(f"[Client B {addr}] {data.decode('utf-8')}")
     finally:
-        del clients[addr]
+        clients.remove(conn)
         conn.close()
 
 def start_control_server():
-    # socket manager
+    # Manager input
     sm = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sm.bind(("0.0.0.0", CONTROL_PORT))
     sm.listen(1)
     print(f"[SERVER] Listening for manager on port {CONTROL_PORT}")
 
-    # socket client B
+    # Client input
     sc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sc.bind(("0.0.0.0", CONTROL_PORT+1))
+    sc.bind(("0.0.0.0", CLIENT_PORT))
     sc.listen(5)
-    print(f"[SERVER] Listening for clients on port {CONTROL_PORT+1}")
+    print(f"[SERVER] Listening for clients on port {CLIENT_PORT}")
 
     def accept_loop(sock, handler):
         while True:
@@ -67,47 +68,12 @@ def start_control_server():
     threading.Thread(target=accept_loop, args=(sc, handle_client), daemon=True).start()
 
 # ========================
-# SERVER VIEW SCREEN
-# ========================
-def recvall(sock, n):
-    data = bytearray()
-    while len(data) < n:
-        packet = sock.recv(n - len(data))
-        if not packet:
-            return None
-        data.extend(packet)
-    return data
-
-def start_screen_server():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("0.0.0.0", SCREEN_PORT))
-        s.listen(5)
-        print(f"[SERVER] Screen server listening on {SCREEN_PORT}")
-        while True:
-            conn, addr = s.accept()
-            print("Screen stream from", addr)
-            try:
-                while True:
-                    header = recvall(conn, 4)
-                    if not header:
-                        break
-                    (length,) = struct.unpack(">I", header)
-                    payload = recvall(conn, length)
-                    if not payload:
-                        break
-
-                    img = Image.open(io.BytesIO(payload))
-                    cv_img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-                    cv2.imshow(f"Client {addr[0]}", cv_img)
-                    if cv2.waitKey(1) & 0xFF == ord("q"):
-                        break
-            finally:
-                conn.close()
-                cv2.destroyAllWindows()
-
-# ========================
 # MAIN
 # ========================
 if __name__ == "__main__":
+    # chạy control server
     threading.Thread(target=start_control_server, daemon=True).start()
-    start_screen_server()
+
+    # chạy screen server relay Client <-> Manager
+    screen_server = ServerScreen("0.0.0.0", SCREEN_PORT)
+    screen_server.run()
