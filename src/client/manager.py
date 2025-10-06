@@ -1,25 +1,24 @@
+# manager.py
+
 import threading
 import socket
 from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
 
-SERVER_HOST = "10.10.30.179"
-INPUT_PORT = 9012
-SCREEN_PORT = 5000
+SERVER_HOST = "10.10.58.215"
+CONTROL_PORT = 9010   # gửi input tới server
+SCREEN_PORT = 5000    # nhận màn hình từ server
 
 if __name__ == "__main__":
-    # Kết nối input
+    # Kết nối tới server để gửi input
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind((SERVER_HOST, INPUT_PORT))
-    sock.listen(1)
-    print("[MANAGER] Waiting for client input connection...")
-    conn, addr = sock.accept()
-    print("[MANAGER] Client input connected:", addr)
+    sock.connect((SERVER_HOST, CONTROL_PORT))
+    print("[MANAGER] Connected to server for input")
 
-    # Input handler
-    input_handler = ManagerInput(conn)
+    # Input handler (gửi sự kiện bàn phím/chuột)
+    input_handler = ManagerInput(sock)
     threading.Thread(target=input_handler.run, daemon=True).start()
 
-    # Viewer handler
+    # Viewer handler (nhận màn hình từ server)
     viewer = ManagerViewer(SERVER_HOST, SCREEN_PORT)
     viewer.run()
