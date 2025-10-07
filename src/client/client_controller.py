@@ -1,7 +1,8 @@
 # client_controller.py
 
-import json
 import socket
+import json
+import threading
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyboardController, Key
 
@@ -24,11 +25,18 @@ class ClientController:
                     break
                 buffer += data
 
-                # tách gói theo \n
+                # Giới hạn buffer để tránh kẹt
+                if len(buffer) > 65536:
+                    buffer = b""
+
                 while b"\n" in buffer:
                     line, buffer = buffer.split(b"\n", 1)
-                    event = json.loads(line.decode("utf-8"))
-                    self.handle_event(event)
+                    try:
+                        event = json.loads(line.decode("utf-8"))
+                        threading.Thread(target=self.handle_event, args=(event,), daemon=True).start()
+                    except Exception as e:
+                        print("[CLIENT CONTROLLER] Parse error:", e)
+
 
     def handle_event(self, event):
         if event["device"] == "mouse":
@@ -63,16 +71,24 @@ class ClientController:
 
     # ================= Keyboard =================
     def handle_keyboard(self, event):
-        if event["type"] == "type":
-            self.keyboard.type(event["text"])
-        elif event["type"] == "press":
-            key = self._map_key(event["key"])
-            if key:
-                self.keyboard.press(key)
-        elif event["type"] == "release":
-            key = self._map_key(event["key"])
-            if key:
-                self.keyboard.release(key)
+        try:
+            if event["type"] == "type":
+                text = event.get("text", "")
+                # Chỉ nhận ký tự in được
+                if text and all(32 <= ord(c) < 127 for c in text):
+                    self.keyboard.type(text)
+
+            elif event["type"] in ("press", "release"):
+                key = self._map_key(event.get("key", ""))
+                if key in [Key.ctrl, Key.alt, Key.cmd, Key.esc]:
+                    print("[CLIENT CONTROLLER] Ignored special key:", key)
+                    return
+                if event["type"] == "press":
+                    self.keyboard.press(key)
+                else:
+                    self.keyboard.release(key)
+        except Exception as e:
+            print("[CLIENT CONTROLLER] Keyboard error:", e)
 
     def _map_key(self, key_str):
         """Chuyển tên phím từ JSON sang Key object hoặc ký tự thường"""
