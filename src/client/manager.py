@@ -5,7 +5,7 @@ import socket
 from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
 
-SERVER_HOST = "10.10.58.215"
+SERVER_HOST = "10.169.157.77"
 CONTROL_PORT = 9010   # gửi input tới server
 SCREEN_PORT = 5000    # nhận màn hình từ server
 

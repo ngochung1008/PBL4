@@ -16,9 +16,9 @@ class ManagerInput:
     def send_event(self, event: dict):
         """Gửi sự kiện dạng JSON"""
         try:
-            msg = json.dumps(event).encode("utf-8")
+            msg = (json.dumps(event) + "\n").encode("utf-8")
             # thêm \n để phân tách gói khi gửi liên tục
-            self.conn.sendall(msg + b"\n")
+            self.conn.sendall(msg)
         except Exception as e:
             print("[MANAGER INPUT] Send error:", e)
 
