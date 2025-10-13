@@ -12,29 +12,31 @@ class ClientScreen:
         self.fps = fps
         self.quality = quality
 
-    def capture_jpeg_bytes(self, monitor_index=0):
+    def capture_frame(self):
         with mss() as sct:
-            monitor = sct.monitors[monitor_index]
+            monitor = sct.monitors[0]  # full screen
             sct_img = sct.grab(monitor)
             img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-            bio = io.BytesIO()
-            img.save(bio, format="JPEG", quality=self.quality)
-            return bio.getvalue()
+            return img, sct_img.width, sct_img.height
 
     def run(self):
         interval = 1.0 / self.fps
         while True:
             try:
                 with socket.create_connection((self.server_host, self.screen_port)) as s:
-                    # 🔥 gửi handshake báo đây là client
                     s.sendall(b"CLNT:")
                     print("[CLIENT SCREEN] Connected to screen server as Client")
 
                     while True:
                         start = time.time()
-                        jpg = self.capture_jpeg_bytes()
-                        length = struct.pack(">I", len(jpg))
-                        s.sendall(length + jpg)
+                        img, w, h = self.capture_frame()
+
+                        bio = io.BytesIO()
+                        img.save(bio, format="JPEG", quality=self.quality)
+                        jpg = bio.getvalue()
+
+                        header = struct.pack(">III", w, h, len(jpg))
+                        s.sendall(header + jpg)
 
                         elapsed = time.time() - start
                         time.sleep(max(0, interval - elapsed))

@@ -24,11 +24,13 @@ class ManagerInput:
 
     # ================== Mouse ==================
     def on_move(self, x, y):
+        scaled_x = int(x * self.viewer.scale_x)
+        scaled_y = int(y * self.viewer.scale_y)
         self.send_event({
             "device": "mouse",
             "type": "move",
-            "x": x,
-            "y": y
+            "x": scaled_x,
+            "y": scaled_y
         })
 
     def on_click(self, x, y, button, pressed):
