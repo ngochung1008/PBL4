@@ -1,7 +1,7 @@
-# manager.py
-
 import threading
 import socket
+import sys
+from PyQt6.QtWidgets import QApplication
 from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
 
@@ -10,6 +10,9 @@ CONTROL_PORT = 9010   # gửi input tới server
 SCREEN_PORT = 5000    # nhận màn hình từ server
 
 if __name__ == "__main__":
+    # Khởi tạo QApplication trước
+    app = QApplication(sys.argv)
+
     # Kết nối tới server để gửi input
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((SERVER_HOST, CONTROL_PORT))
@@ -21,4 +24,6 @@ if __name__ == "__main__":
 
     # Viewer handler (nhận màn hình từ server)
     viewer = ManagerViewer(SERVER_HOST, SCREEN_PORT)
-    viewer.run()
+    viewer.show()
+
+    sys.exit(app.exec())

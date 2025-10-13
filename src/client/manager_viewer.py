@@ -1,44 +1,35 @@
-# manager_viewer.py 
-
 import socket
 import struct
 import io
 from PIL import Image
-import matplotlib.pyplot as plt
+from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
+from PyQt6.QtGui import QPixmap, QImage
+from PyQt6.QtCore import QThread, pyqtSignal, Qt
+import sys
 
-class ManagerViewer:
+class ScreenReceiver(QThread):
+    frame_received = pyqtSignal(QImage)
+    connection_lost = pyqtSignal(str)
+
     def __init__(self, host, port):
+        super().__init__()
         self.host = host
         self.port = port
-        self.running = True  # trạng thái vòng lặp
-
-    def on_key(self, event):
-        """Xử lý phím nhấn từ matplotlib"""
-        if event.key == 'q':  # nhấn Q để thoát
-            print("[MANAGER VIEWER] Quit signal received (q).")
-            self.running = False
-            plt.close()
+        self.running = True
 
     def run(self):
-        """Nhận ảnh màn hình từ server và hiển thị"""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((self.host, self.port))   # 🔥 kết nối tới server, KHÔNG bind
-            sock.sendall(b"MGR:")   # 🔥 báo cho server biết đây là Manager
-            print("[MANAGER VIEWER] Connected to server for screen stream")
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.connect((self.host, self.port))
+                print("[MANAGER VIEWER] Connected to server for screen stream")
 
-            fig, ax = plt.subplots()
-            fig.canvas.mpl_connect("key_press_event", self.on_key)
-            img_disp = None
-
-            while self.running:
-                try:
-                    # Đọc 4 byte độ dài
-                    length_bytes = sock.recv(4)
-                    if not length_bytes:
+                while self.running:
+                    # Nhận header (12 byte: width, height, length)
+                    header = sock.recv(12)
+                    if not header:
                         break
-                    length = struct.unpack(">I", length_bytes)[0]
 
-                    # Nhận dữ liệu ảnh
+                    w, h, length = struct.unpack(">III", header)
                     data = b""
                     while len(data) < length:
                         packet = sock.recv(length - len(data))
@@ -49,21 +40,66 @@ class ManagerViewer:
                     if not data:
                         break
 
-                    # Giải mã ảnh
-                    jpg_stream = io.BytesIO(data)
-                    img = Image.open(jpg_stream)
+                    # Giải mã ảnh JPEG -> QImage
+                    img = Image.open(io.BytesIO(data)).convert("RGB")
+                    qimg = QImage(
+                        img.tobytes(), img.width, img.height, QImage.Format.Format_RGB888
+                    )
 
-                    # Hiển thị
-                    if img_disp is None:
-                        img_disp = ax.imshow(img)
-                        plt.axis("off")
-                    else:
-                        img_disp.set_data(img)
+                    # Phát tín hiệu ra để cập nhật GUI
+                    self.frame_received.emit(qimg)
 
-                    plt.pause(0.001)
+        except Exception as e:
+            self.connection_lost.emit(str(e))
 
-                except Exception as e:
-                    print("[MANAGER VIEWER] Error:", e)
-                    break
+        print("[MANAGER VIEWER] Connection closed.")
 
-            print("[MANAGER VIEWER] Closed connection.")
+    def stop(self):
+        self.running = False
+        self.quit()
+        self.wait()
+
+
+class ManagerViewer(QWidget):
+    def __init__(self, host, port):
+        super().__init__()
+        self.host = host
+        self.port = port
+        self.setWindowTitle("Remote Client Screen (Manager)")
+        self.setGeometry(100, 100, 960, 540)
+        self.label = QLabel("Đang nhận hình ảnh từ client...", self)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.label)
+        self.setLayout(layout)
+
+        # Tạo luồng nhận hình
+        self.receiver = ScreenReceiver(self.host, self.port)
+        self.receiver.frame_received.connect(self.update_frame)
+        self.receiver.connection_lost.connect(self.on_connection_lost)
+        self.receiver.start()
+
+    def update_frame(self, qimg):
+        pixmap = QPixmap.fromImage(qimg)
+        self.label.setPixmap(pixmap.scaled(
+            self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        ))
+
+    def resizeEvent(self, event):
+        if self.label.pixmap():
+            self.label.setPixmap(
+                self.label.pixmap().scaled(
+                    self.label.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+
+    def on_connection_lost(self, msg):
+        self.label.setText(f"Mất kết nối tới client: {msg}")
+
+    def closeEvent(self, event):
+        print("[MANAGER VIEWER] Closing viewer...")
+        self.receiver.stop()
+        event.accept()
