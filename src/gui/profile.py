@@ -5,21 +5,22 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from ui_components import (
+from src.gui.ui_components import (
     DARK_BG, create_card, create_title, create_input,
     create_primary_button, create_back_button
 )
 
-
 class ProfileWindow(QWidget):
-    def __init__(self):
+    def __init__(self, user):
+        print("OKe")
         super().__init__()
         self.setWindowTitle("Account Profile")
         self.resize(1000, 650)
         self.setStyleSheet(f"background-color: {DARK_BG};")
         self.is_editing = False
+        self.user = user
         self.init_ui()
-
+    
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(30, 20, 30, 20)
@@ -49,12 +50,12 @@ class ProfileWindow(QWidget):
             }
         """)
 
-        self.username = create_input("johndoe")
-        self.full_name = create_input("John Doe")
-        self.email = create_input("john@example.com")
-        self.created_at = create_input("2025-01-01 10:00")
-        self.last_login = create_input("2025-09-10 09:00")
-        self.role = create_input("Admin")
+        self.username = create_input(self.user.Username)
+        self.full_name = create_input(self.user.FullName)
+        self.email = create_input(self.user.Email)
+        self.created_at = create_input(self.user.CreatedAt)
+        self.last_login = create_input(self.user.LastLogin)
+        self.role = create_input(self.user.Role)
 
         pass_form = QFormLayout()
         pass_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)

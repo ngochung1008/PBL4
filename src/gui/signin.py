@@ -20,6 +20,7 @@ class SignInWindow(QWidget):
         self.resize(1100, 650)
         self.setStyleSheet(f"background-color: {DARK_BG};")
         self.init_ui()
+        self.token = None
 
     def init_ui(self):
         root_layout = QHBoxLayout(self)
@@ -119,5 +120,9 @@ class SignInWindow(QWidget):
             QMessageBox.critical(None, "Error", "Sign in failed! Check your credentials.")
             return
         QMessageBox.information(None, "Success", f"Account created for {username}!")
+        self.token = token 
+        # self.close()   
+    def dong(self):
+        self.close()    
 
 
