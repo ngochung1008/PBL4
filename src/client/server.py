@@ -36,6 +36,17 @@ def handle_manager(conn, addr):
                         clients.remove(c)
                     except:
                         pass
+            # --- NEW: cũng broadcast tới các manager khác (để đồng bộ con trỏ giữa managers) ---
+            for m in list(managers):
+                if m is conn:
+                    continue
+                try:
+                    m.sendall(data)
+                except:
+                    try:
+                        managers.remove(m)
+                    except:
+                        pass
     finally:
         if conn in managers:
             managers.remove(conn)
