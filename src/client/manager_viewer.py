@@ -10,7 +10,7 @@ import math
 import threading
 import time
 
-class ScreenReceiver(QThread):
+class ManagerViewer(QWidget):
     frame_received = pyqtSignal(object)
     connection_lost = pyqtSignal(str)
 
@@ -18,7 +18,35 @@ class ScreenReceiver(QThread):
         super().__init__()
         self.host = host
         self.port = port
+        self.input_handler = None
         self.running = True
+    
+    def set_input_handler(self, handler):
+        """Gắn ManagerInput để viewer có thể tạm vô hiệu hoá gửi khi di chuyển con trỏ hệ thống."""
+        self.input_handler = handler
+
+    def show_remote_cursor(self, remote_x, remote_y, move_system_cursor: bool = True):
+        """Hiển thị overlay con trỏ vị trí remote trên label.
+           Nếu move_system_cursor=True sẽ đặt con trỏ hệ thống của Manager trùng với remote cursor.
+        """
+        if self.remote_width <= 0 or self.remote_height <= 0:
+            return
+        lx, ly = self.remote_to_label_coords(remote_x, remote_y)
+        # đặt vị trí sao cho con trỏ nằm giữa label
+        w = self.cursor_label.width()
+        h = self.cursor_label.height()
+        self.cursor_label.move(max(0, lx - w // 2), max(0, ly - h // 2))
+        self.cursor_label.show()
+
+        if move_system_cursor:
+            try:
+                # tạm vô hiệu hoá gửi events do hành động này để tránh feedback loop
+                if self.input_handler:
+                    self.input_handler.set_ignore(0.2)  # 200ms ignore
+                global_pos = self.label.mapToGlobal(QPoint(lx, ly))
+                QCursor.setPos(global_pos)
+            except Exception as e:
+                print("[MANAGER VIEWER] Could not move system cursor:", e)
 
     def run(self):
         try:
@@ -100,7 +128,7 @@ class ManagerViewer(QWidget):
         self.cursor_label.hide()
 
         # Tạo luồng nhận hình
-        self.receiver = ScreenReceiver(self.host, self.port)
+        self.receiver = ManagerViewer(self.host, self.port)
         self.receiver.frame_received.connect(self.update_frame)
         self.receiver.connection_lost.connect(self.on_connection_lost)
         self.receiver.start()

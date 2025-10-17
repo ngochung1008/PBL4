@@ -48,12 +48,27 @@ if __name__ == "__main__":
     sock.connect((SERVER_HOST, CONTROL_PORT))
     print("[MANAGER] Connected to server for input")
 
+    # Input handler (gửi sự kiện bàn phím/chuột) - truyền viewer để dùng scale nếu cần
+    input_handler = ManagerInput(sock, viewer=viewer)
+
+    # Gắn input handler vào viewer để viewer có thể tạm vô hiệu hoá khi đặt con trỏ hệ thống
+    viewer.set_input_handler(input_handler)
+
     # Start receiver thread to get client -> manager forwarded events
     threading.Thread(target=start_recv_loop, args=(sock, viewer), daemon=True).start()
 
-    # Input handler (gửi sự kiện bàn phím/chuột) - truyền viewer để dùng scale nếu cần
-    input_handler = ManagerInput(sock, viewer=viewer)
+    # Khởi listener cho input (trong thread)
     threading.Thread(target=input_handler.run, daemon=True).start()
+
+    # Wait until viewer received at least one frame (để mapping khả dụng) - tối đa 5s
+    import time
+    waited = 0.0
+    while waited < 5.0:
+        app.processEvents()
+        if getattr(viewer, "remote_width", 0) and viewer.remote_width > 1:
+            break
+        time.sleep(0.05)
+        waited += 0.05
 
     # Send initial sync: lấy vị trí hiện tại trên viewer (nếu nằm trong vùng hiển thị)
     mapped = viewer.get_current_mapped_remote()
