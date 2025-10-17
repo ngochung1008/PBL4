@@ -11,9 +11,24 @@ class ManagerInput:
     def __init__(self, conn, viewer=None):
         self.conn = conn
         self.viewer = viewer
+        self._ignore = False  # khi True: không gửi những move đến server (dùng để tránh loop)
+
+    def set_ignore(self, duration: float):
+        """Tạm thời bỏ gửi local events trong duration giây."""
+        try:
+            self._ignore = True
+            def _clear():
+                self._ignore = False
+            t = threading.Timer(duration, _clear)
+            t.daemon = True
+            t.start()
+        except Exception as e:
+            print("[MANAGER INPUT] set_ignore error:", e)
 
     def send_event(self, event: dict):
         """Gửi sự kiện dạng JSON"""
+        if self._ignore:
+            return
         try:
             msg = (json.dumps(event) + "\n").encode("utf-8")
             # thêm \n để phân tách gói khi gửi liên tục
@@ -23,6 +38,8 @@ class ManagerInput:
 
     # ================== Mouse ==================
     def on_move(self, x, y):
+        if self._ignore:
+            return
         # Không dùng x,y từ pynput trực tiếp: lấy vị trí con trỏ trong viewer
         if not self.viewer:
             return
@@ -39,6 +56,8 @@ class ManagerInput:
         })
 
     def on_click(self, x, y, button, pressed):
+        if self._ignore:
+            return
         if not self.viewer:
             return
         mapped = self.viewer.get_current_mapped_remote()
@@ -56,6 +75,8 @@ class ManagerInput:
         })
 
     def on_scroll(self, x, y, dx, dy):
+        if self._ignore:
+            return
         # gửi scroll chỉ khi trong vùng
         if not self.viewer:
             return
@@ -111,15 +132,13 @@ class ManagerInput:
     # ================== Run Listeners ==================
     def run(self):
         """Khởi động listener cho chuột + bàn phím"""
-        t_mouse = threading.Thread(
-            target=lambda: mouse.Listener(
-                on_move=self.on_move,
-                on_click=self.on_click,
-                on_scroll=self.on_scroll
-            ).run(),
-            daemon=True
+        # Thay đoạn này:
+        mouse_listener = mouse.Listener(
+            on_move=self.on_move,
+            on_click=self.on_click,
+            on_scroll=self.on_scroll
         )
-        t_mouse.start()
+        mouse_listener.start()  # dùng start() thay vì .run()
 
         with keyboard.Listener(
             on_press=self.on_press,

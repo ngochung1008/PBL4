@@ -12,7 +12,7 @@ FPS = 1  # khung hình/giây
 
 if __name__ == "__main__":
     # chạy input controller ở luồng riêng (nhận từ SERVER -> CLIENT)
-    controller = ClientController(SERVER_HOST, CLIENT_PORT)   # sửa lại thành CLIENT_PORT
+    controller = ClientController(SERVER_HOST, CLIENT_PORT)
     threading.Thread(target=controller.run, daemon=True).start()
 
     # chạy screen streamer (blocking)
