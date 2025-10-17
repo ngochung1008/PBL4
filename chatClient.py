@@ -1,8 +1,9 @@
 import socket
 import struct
+from config import server_config
 
-HOST = "10.10.30.157"   # IP của server (chạy local thì giữ nguyên)
-PORT = 5000
+HOST = server_config.SERVER_IP   # IP của server (chạy local thì giữ nguyên)
+PORT = server_config.SERVER_HOST  # port server lắng nghe
 
 def send_message(conn, msg_type, *fields):
     parts = []
