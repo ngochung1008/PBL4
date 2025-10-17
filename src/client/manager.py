@@ -54,6 +54,28 @@ if __name__ == "__main__":
     # Gắn input handler vào viewer để viewer có thể tạm vô hiệu hoá khi đặt con trỏ hệ thống
     viewer.set_input_handler(input_handler)
 
+    # Chờ frame đầu tiên để có thể map tọa độ
+    while not viewer.remote_width > 1:
+        app.processEvents()
+        time.sleep(0.1)
+
+    # Lấy vị trí chuột hiện tại của manager
+    current_pos = QCursor.pos()
+    label_pos = viewer.label.mapFromGlobal(current_pos)
+    
+    # Map sang tọa độ remote
+    if label_pos:
+        mapped = viewer.label_coords_to_remote(label_pos.x(), label_pos.y())
+        if mapped:
+            # Gửi sync event với vị trí chuột của manager
+            sync_event = {
+                "device": "mouse",
+                "type": "set_position",
+                "x": mapped[0],
+                "y": mapped[1]
+            }
+            sock.sendall((json.dumps(sync_event) + "\n").encode())
+
     # Start receiver thread to get client -> manager forwarded events
     threading.Thread(target=start_recv_loop, args=(sock, viewer), daemon=True).start()
 

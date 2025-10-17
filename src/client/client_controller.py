@@ -69,13 +69,14 @@ class ClientController:
     # ================= Mouse =================
     def handle_mouse(self, event):
         if event["type"] == "move":
-            self.mouse.position = (event["x"], event["y"])
+            if "x" in event and "y" in event:
+                self.mouse.position = (event["x"], event["y"])
         elif event["type"] == "set_position":
-            # Sync ban đầu: đặt con trỏ client về vị trí manager yêu cầu
+            # Sync vị trí chuột ban đầu
             try:
                 self.mouse.position = (event["x"], event["y"])
             except Exception as e:
-                print("[CLIENT CONTROLLER] Set position error:", e)
+                print("[CLIENT] Set position error:", e)
         elif event["type"] == "click":
             btn = self._map_button(event["button"])
             if btn:

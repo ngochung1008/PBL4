@@ -129,14 +129,26 @@ class ManagerViewer(QWidget):
 
     # --- mapping helpers ---
     def label_coords_to_remote(self, lx, ly):
+        """Chuyển tọa độ trong label sang tọa độ remote.
+        Trả về None nếu nằm ngoài vùng hiển thị."""
+        
+        # Kiểm tra có nằm trong vùng hiển thị không
         rx_in = lx - self.offset_x
         ry_in = ly - self.offset_y
-        if rx_in < 0 or ry_in < 0 or rx_in >= self.display_w or ry_in >= self.display_h:
+        
+        if (rx_in < 0 or ry_in < 0 or 
+            rx_in >= self.display_w or 
+            ry_in >= self.display_h):
             return None
+
+        # Chuyển sang tọa độ remote
         remote_x = int(rx_in / max(1.0, self.ratio_x))
         remote_y = int(ry_in / max(1.0, self.ratio_y))
+        
+        # Đảm bảo không vượt quá kích thước remote
         remote_x = max(0, min(self.remote_width - 1, remote_x))
         remote_y = max(0, min(self.remote_height - 1, remote_y))
+        
         return remote_x, remote_y
 
     def remote_to_label_coords(self, remote_x, remote_y):
