@@ -76,7 +76,7 @@ class ClientCard(QFrame):
         self.setLayout(layout)
 
 
-class ManageClientsUI(QWidget):
+class ManageScreensWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Server - Manage Clients")
@@ -92,8 +92,8 @@ class ManageClientsUI(QWidget):
 
         # Thanh trên cùng: Back + Title
         top_layout = QHBoxLayout()
-        back_btn = create_back_button()
-        top_layout.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.back_btn = create_back_button()
+        top_layout.addWidget(self.back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         top_layout.addStretch()
 
@@ -125,9 +125,18 @@ class ManageClientsUI(QWidget):
         main_layout.addLayout(grid_layout, stretch=1)
         self.setLayout(main_layout)
 
+        self.back_btn.clicked.connect(self.open_server_gui)
+    def open_server_gui(self):
+        import importlib
+        mod = importlib.import_module("server_gui")
+        ServerWindow = getattr(mod, "ServerWindow")
+        self.server_gui = ServerWindow()
+        self.server_gui.show()
+        self.close()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = ManageClientsUI()
+    window = ManageScreensWindow()
     window.show()
     sys.exit(app.exec())

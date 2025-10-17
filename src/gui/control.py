@@ -1,8 +1,7 @@
-# control_server.py  (ví dụ)
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QFrame, QSplitter, QListWidget, QLabel,
+    QFrame, QSplitter, QLabel,
     QTextEdit, QPushButton, QStatusBar
 )
 from PyQt6.QtCore import Qt
@@ -14,7 +13,7 @@ from ui_components import (
 )
 
 
-class ServerWindow(QWidget):
+class ControlWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Server Control Panel")
@@ -24,21 +23,24 @@ class ServerWindow(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
+
+        # --- Thanh top ---
         top_bar = QHBoxLayout()
 
-        back_btn = create_back_button()
-        top_bar.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.back_btn = create_back_button()
+        top_bar.addWidget(self.back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         search_user_box, self.search_user = create_search_bar("Search client by username or IP")
-
         top_bar.addStretch()
         top_bar.addWidget(search_user_box)
 
         main_layout.addLayout(top_bar)
 
+        # --- Splitter chính ---
         splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter, stretch=1)
 
+        # --- Sidebar (client list) ---
         sidebar = QFrame()
         sidebar.setStyleSheet(f"background-color: {CARD_BG}; border-radius: 6px;")
         sidebar_layout = QVBoxLayout(sidebar)
@@ -50,12 +52,16 @@ class ServerWindow(QWidget):
         self.client_list = create_client_list()
         sidebar_layout.addWidget(self.client_list)
 
-        self.client_list.addItem("user1 - 192.168.1.10")
-        self.client_list.addItem("user2 - 192.168.1.11")
-        self.client_list.addItem("user3 - 192.168.1.12")
+        # ví dụ dữ liệu mẫu
+        self.client_list.addItems([
+            "user1 - 192.168.1.10",
+            "user2 - 192.168.1.11",
+            "user3 - 192.168.1.12"
+        ])
 
         splitter.addWidget(sidebar)
 
+        # --- Panel bên phải ---
         right_panel = QFrame()
         right_layout = QVBoxLayout(right_panel)
 
@@ -63,6 +69,7 @@ class ServerWindow(QWidget):
         self.server_ip_label.setStyleSheet("font-size: 12pt; font-weight: bold;")
         right_layout.addWidget(self.server_ip_label, alignment=Qt.AlignmentFlag.AlignLeft)
 
+        # --- Các nút chức năng ---
         btn_layout = QHBoxLayout()
         actions = ["Keylogger", "Screen", "Control", "File Transfer", "History"]
         for act in actions:
@@ -76,12 +83,13 @@ class ServerWindow(QWidget):
                     font-weight: bold;
                 }}
                 QPushButton:hover {{
-                    opacity: 0.85;
+                    background-color: #1ed760;
                 }}
             """)
             btn_layout.addWidget(btn)
         right_layout.addLayout(btn_layout)
 
+        # --- Khu vực hiển thị ---
         self.action_area = QTextEdit()
         self.action_area.setPlaceholderText("Action output will appear here...")
         self.action_area.setStyleSheet(f"""
@@ -99,6 +107,7 @@ class ServerWindow(QWidget):
         splitter.addWidget(right_panel)
         splitter.setSizes([250, 750])
 
+        # --- Status bar ---
         self.status = QStatusBar()
         self.status.setFixedHeight(22)
         self.status.setStyleSheet(f"""
@@ -111,10 +120,21 @@ class ServerWindow(QWidget):
         self.status.showMessage("Ready.")
         main_layout.addWidget(self.status)
 
+        # --- Gắn sự kiện ---
+        self.back_btn.clicked.connect(self.open_server_gui)
+
+    def open_server_gui(self):
+        import importlib
+        mod = importlib.import_module("server_gui")
+        ServerWindow = getattr(mod, "ServerWindow")
+        self.server_gui = ServerWindow()
+        self.server_gui.show()
+        self.close()
+
 
 def main():
     app = QApplication(sys.argv)
-    win = ServerWindow()
+    win = ControlWindow()
     win.show()
     sys.exit(app.exec())
 

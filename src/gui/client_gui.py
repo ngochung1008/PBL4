@@ -144,12 +144,19 @@ class ClientWindow(QWidget):
         outer_layout.addLayout(center_layout)
         outer_layout.addStretch()
 
+        
+
     def copy_ip(self):
         QApplication.clipboard().setText(self.ip_field.text())
         QMessageBox.information(self, "Copied", "IP address copied to clipboard!")
 
     def on_profile(self):
-        QMessageBox.information(self, "Profile", "Profile editing not implemented yet.")
+        import importlib
+        mod = importlib.import_module("profile")
+        ProfileWindow = getattr(mod, "ProfileWindow")
+        self.profile_window = ProfileWindow()
+        self.profile_window.show()
+        self.close()
 
     def on_back(self):
         QMessageBox.information(self, "Back", "Quay lại màn hình trước.")

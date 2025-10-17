@@ -13,7 +13,7 @@ from ui_components import (
 )
 
 
-class ServerWindow(QWidget):
+class ManageClientsWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Server Control Panel")
@@ -26,9 +26,9 @@ class ServerWindow(QWidget):
 
         # ==== Thanh top: Back + Add Client ====
         top_bar = QHBoxLayout()
-        back_btn = create_back_button()
+        self.back_btn = create_back_button()
         search_user_box, self.search_user = create_search_bar("Search client by username or IP")
-        top_bar.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        top_bar.addWidget(self.back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         top_bar.addStretch()
 
@@ -172,6 +172,16 @@ class ServerWindow(QWidget):
             "David": {"email": "david@example.com", "ip": "192.168.1.20", "status": "Not connect"},
         }
 
+        self.back_btn.clicked.connect(self.open_server_gui)
+
+    def open_server_gui(self):
+        import importlib
+        mod = importlib.import_module("server_gui")
+        ServerWindow = getattr(mod, "ServerWindow")
+        self.server_gui = ServerWindow()
+        self.server_gui.show()
+        self.close()
+
     def show_client_info(self, index):
         if index < 0:
             self.lbl_username.setText("-")
@@ -198,7 +208,7 @@ class ServerWindow(QWidget):
 def main():
     app = QApplication(sys.argv)
     app.setFont(QFont("Segoe UI", 10))
-    win = ServerWindow()
+    win = ManageClientsWindow()
     win.show()
     sys.exit(app.exec())
 

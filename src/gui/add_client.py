@@ -28,10 +28,8 @@ class AddClientWindow(QWidget):
 
         # --- Header ---
         header_layout = QHBoxLayout()
-        back_btn = create_back_button()
-        header_layout.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
-
-
+        self.back_btn = create_back_button()
+        header_layout.addWidget(self.back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         main_layout.addLayout(header_layout)
 
         # --- Center ---
@@ -86,15 +84,22 @@ class AddClientWindow(QWidget):
             margin-top: 12px;
         """)
 
-        # Add widgets to center layout
         center_layout.addWidget(self.ip_edit, alignment=Qt.AlignmentFlag.AlignHCenter)
         center_layout.addWidget(self.btn_connect, alignment=Qt.AlignmentFlag.AlignHCenter)
         center_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        # Add to main layout with stretch
         main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         main_layout.addLayout(center_layout)
         main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+
+        # ✅ Kết nối nút back
+        self.back_btn.clicked.connect(self.open_manage_clients)
+
+    def open_manage_clients(self):
+        from manage_clients import ManageClientsWindow  # ✅ import muộn tránh lỗi vòng lặp
+        self.manage_clients_window = ManageClientsWindow()
+        self.manage_clients_window.show()
+        self.close()
 
 
 if __name__ == "__main__":

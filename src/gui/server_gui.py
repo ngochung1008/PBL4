@@ -6,9 +6,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from ui_components import DARK_BG, create_back_button  # ✅ import hàm back button
+from ui_components import DARK_BG, create_back_button
 
-# Bảng màu
 SPOTIFY_GREEN = "#1DB954"
 CARD_BG = "#181818"
 TEXT_LIGHT = "#FFFFFF"
@@ -31,11 +30,9 @@ class ServerWindow(QWidget):
         top_layout = QHBoxLayout()
         top_layout.setSpacing(10)
 
-        # ✅ Back button dùng ui_components
         self.btn_back = create_back_button()
         top_layout.addWidget(self.btn_back, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        # Username & IP
         lbl_info = QLabel("ServerUser  |  192.168.1.100")
         lbl_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_info.setStyleSheet("font-size: 18px; font-weight: bold;")
@@ -60,10 +57,9 @@ class ServerWindow(QWidget):
             }}
         """)
         top_layout.addWidget(self.btn_profile, alignment=Qt.AlignmentFlag.AlignRight)
-
         main_layout.addLayout(top_layout)
 
-        # Spacer đẩy phần dưới xuống giữa
+        # Spacer
         main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # ----------------- Container Options -----------------
@@ -77,13 +73,11 @@ class ServerWindow(QWidget):
         container_layout.setSpacing(25)
         container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Tiêu đề trong container
         lbl_options = QLabel("Server Options")
         lbl_options.setStyleSheet("font-size: 20px; font-weight: bold;")
         lbl_options.setAlignment(Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(lbl_options)
 
-        # Các nút lựa chọn
         self.btn_control = QPushButton("Control")
         self.btn_manage_screen = QPushButton("Manage All Screen")
         self.btn_manage_clients = QPushButton("Manage Clients")
@@ -107,9 +101,37 @@ class ServerWindow(QWidget):
             container_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         main_layout.addWidget(container, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        # Spacer dưới để căn giữa container
         main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+
+        # ----------------- Kết nối sự kiện -----------------
+        self.btn_profile.clicked.connect(self.open_profile)
+        self.btn_control.clicked.connect(self.open_control)
+        self.btn_manage_screen.clicked.connect(self.open_manage_screens)
+        self.btn_manage_clients.clicked.connect(self.open_manage_clients)
+
+    # ----------------- Xử lý mở cửa sổ -----------------
+    def open_profile(self):
+        from profile import ProfileWindow
+        self.profile_window = ProfileWindow()
+        self.profile_window.show()
+        self.close()
+    def open_control(self):
+        from control import ControlWindow
+        self.control_window = ControlWindow()
+        self.control_window.show()
+        self.close()
+        
+    def open_manage_screens(self):
+        from manage_screens import ManageScreensWindow
+        self.screens_window = ManageScreensWindow()
+        self.screens_window.show()
+        self.close()
+
+    def open_manage_clients(self):
+        from manage_clients import ManageClientsWindow
+        self.clients_window = ManageClientsWindow()
+        self.clients_window.show()
+        self.close()
 
 
 if __name__ == "__main__":

@@ -4,9 +4,9 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 ph = PasswordHasher(
-    time_cost=2,      # số vòng lặp (tăng => chậm hơn, an toàn hơn)
-    memory_cost=65536, # bộ nhớ (KB) dùng khi hash
-    parallelism=2      # số luồng song song
+    time_cost=2,     
+    memory_cost=65536, 
+    parallelism=2   
 )
 roles = ['admin', 'user', 'viewer']
 

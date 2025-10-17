@@ -12,7 +12,7 @@ from ui_components import (
 )
 
 
-class SignUpWindow(QWidget):
+class SignInWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sign In")
@@ -117,6 +117,6 @@ class SignUpWindow(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    win = SignUpWindow()
+    win = SignInWindow()
     win.showMaximized()
     sys.exit(app.exec())
