@@ -1,5 +1,3 @@
-# manager_input.py
-
 import json
 import threading
 from pynput import mouse, keyboard
@@ -25,15 +23,14 @@ class ManagerInput:
 
     # ================== Mouse ==================
     def on_move(self, x, y):
-        try:
-                scale_x = getattr(self.viewer, "scale_x", 1.0) if self.viewer else 1.0
-                scale_y = getattr(self.viewer, "scale_y", 1.0) if self.viewer else 1.0
-                scaled_x = int(x * scale_x)
-                scaled_y = int(y * scale_y)
-        except Exception:
-            scaled_x = int(x)
-            scaled_y = int(y)
-
+        # Không dùng x,y từ pynput trực tiếp: lấy vị trí con trỏ trong viewer
+        if not self.viewer:
+            return
+        mapped = self.viewer.get_current_mapped_remote()
+        if not mapped:
+            # ra khỏi vùng hiển thị -> không gửi
+            return
+        scaled_x, scaled_y = mapped
         self.send_event({
             "device": "mouse",
             "type": "move",
@@ -42,15 +39,13 @@ class ManagerInput:
         })
 
     def on_click(self, x, y, button, pressed):
+        if not self.viewer:
+            return
+        mapped = self.viewer.get_current_mapped_remote()
+        if not mapped:
+            return
+        sx, sy = mapped
         btn = str(button).replace("Button.", "")
-        try:
-                scale_x = getattr(self.viewer, "scale_x", 1.0) if self.viewer else 1.0
-                scale_y = getattr(self.viewer, "scale_y", 1.0) if self.viewer else 1.0
-                sx = int(x * scale_x)
-                sy = int(y * scale_y)
-        except Exception:
-            sx, sy = int(x), int(y)
-
         self.send_event({
             "device": "mouse",
             "type": "click",
@@ -61,11 +56,17 @@ class ManagerInput:
         })
 
     def on_scroll(self, x, y, dx, dy):
+        # gửi scroll chỉ khi trong vùng
+        if not self.viewer:
+            return
+        mapped = self.viewer.get_current_mapped_remote()
+        if not mapped:
+            return
         self.send_event({
             "device": "mouse",
             "type": "scroll",
-            "x": x,
-            "y": y,
+            "x": mapped[0],
+            "y": mapped[1],
             "dx": dx,
             "dy": dy
         })
@@ -110,7 +111,6 @@ class ManagerInput:
     # ================== Run Listeners ==================
     def run(self):
         """Khởi động listener cho chuột + bàn phím"""
-        # Chuột chạy thread riêng
         t_mouse = threading.Thread(
             target=lambda: mouse.Listener(
                 on_move=self.on_move,
@@ -121,7 +121,6 @@ class ManagerInput:
         )
         t_mouse.start()
 
-        # Bàn phím chạy thread chính
         with keyboard.Listener(
             on_press=self.on_press,
             on_release=self.on_release
