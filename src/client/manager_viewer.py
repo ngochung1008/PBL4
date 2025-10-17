@@ -1,5 +1,3 @@
-# manager_viewer.py
-
 import socket
 import struct
 import io
@@ -39,7 +37,6 @@ class ScreenReceiver(QThread):
                     return data
 
                 while self.running:
-                    # Nhận header (12 byte: width, height, length)
                     header = recv_all(sock, 12)
                     if not header:
                         break
@@ -49,14 +46,12 @@ class ScreenReceiver(QThread):
                     if not data:
                         break
 
-                    # Giải mã ảnh JPEG -> QImage
                     img = Image.open(io.BytesIO(data)).convert("RGB")
                     bytes_per_line = 3 * img.width
                     qimg = QImage(
                         img.tobytes(), img.width, img.height, bytes_per_line, QImage.Format.Format_RGB888
                     )
 
-                    # Phát tín hiệu ra để cập nhật GUI
                     self.frame_received.emit((qimg, w, h))
 
         except Exception as e:
@@ -80,7 +75,6 @@ class ManagerViewer(QWidget):
         self.label = QLabel("Đang nhận hình ảnh từ client...", self)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setStyleSheet("background-color: black;")
-
         layout = QVBoxLayout(self)
         layout.addWidget(self.label)
         self.setLayout(layout)
@@ -112,7 +106,6 @@ class ManagerViewer(QWidget):
         self.receiver.start()
 
     def update_frame(self, frame_info):
-        # frame_info: (qimg, w, h)
         qimg, w, h = frame_info
         self.remote_width = w
         self.remote_height = h
