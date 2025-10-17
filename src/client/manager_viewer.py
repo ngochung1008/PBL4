@@ -1,6 +1,3 @@
-import socket
-import struct
-import io
 from PIL import Image
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt6.QtGui import QPixmap, QImage, QCursor
@@ -42,7 +39,9 @@ class ScreenReceiver(QThread):
                         break
                     img = Image.open(io.BytesIO(data)).convert("RGB")
                     bytes_per_line = 3 * img.width
-                    qimg = QImage(img.tobytes(), img.width, img.height, bytes_per_line, QImage.Format.Format_RGB888)
+                    qimg = QImage(img.tobytes(), img.width, img.height, 
+                                bytes_per_line, QImage.Format.Format_RGB888)
+                    qimg = qimg.copy()  # <-- THÊM này để đảm bảo buffer
                     self.frame_received.emit((qimg, w, h))
         except Exception as e:
             self.connection_lost.emit(str(e))

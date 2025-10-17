@@ -132,15 +132,13 @@ class ManagerInput:
     # ================== Run Listeners ==================
     def run(self):
         """Khởi động listener cho chuột + bàn phím"""
-        t_mouse = threading.Thread(
-            target=lambda: mouse.Listener(
-                on_move=self.on_move,
-                on_click=self.on_click,
-                on_scroll=self.on_scroll
-            ).run(),
-            daemon=True
+        # Thay đoạn này:
+        mouse_listener = mouse.Listener(
+            on_move=self.on_move,
+            on_click=self.on_click,
+            on_scroll=self.on_scroll
         )
-        t_mouse.start()
+        mouse_listener.start()  # dùng start() thay vì .run()
 
         with keyboard.Listener(
             on_press=self.on_press,

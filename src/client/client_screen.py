@@ -24,6 +24,7 @@ class ClientScreen:
         while True:
             try:
                 with socket.create_connection((self.server_host, self.screen_port)) as s:
+                    s.settimeout(5)  # <-- THÊM timeout 5 giây
                     s.sendall(b"CLNT:")
                     print("[CLIENT SCREEN] Connected to screen server as Client")
 

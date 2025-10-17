@@ -13,43 +13,46 @@ from server_screen import ServerScreen   # import module screen
 CONTROL_PORT = 9010   # Manager -> Server
 CLIENT_PORT = 9011    # Server -> Client
 SCREEN_PORT = 5000    # Client - Server (stream màn hình)
-clients = []  # list kết nối client (chỉ 1 hoặc nhiều)
-managers = []  # list kết nối manager (control channel)
+clients = []  # list kết nối client
+managers = []  # list kết nối manager
+clients_lock = threading.Lock()  # <-- THÊM
+managers_lock = threading.Lock() # <-- THÊM
 
-# ========================
-# SERVER CONTROL
-# ========================
 def handle_manager(conn, addr):
     print("[SERVER] Manager connected:", addr)
-    managers.append(conn)
+    with managers_lock:  # <-- THÊM
+        managers.append(conn)
     try:
         while True:
             data = conn.recv(4096)
             if not data:
                 break
             # forward cho tất cả client
-            for c in list(clients):
-                try:
-                    c.sendall(data)
-                except:
+            with clients_lock:  # <-- THÊM
+                for c in list(clients):
                     try:
-                        clients.remove(c)
+                        c.sendall(data)
                     except:
-                        pass
-            # --- NEW: cũng broadcast tới các manager khác (để đồng bộ con trỏ giữa managers) ---
-            for m in list(managers):
-                if m is conn:
-                    continue
-                try:
-                    m.sendall(data)
-                except:
+                        try:
+                            clients.remove(c)
+                        except:
+                            pass
+            # forward tới các manager khác
+            with managers_lock:  # <-- THÊM
+                for m in list(managers):
+                    if m is conn:
+                        continue
                     try:
-                        managers.remove(m)
+                        m.sendall(data)
                     except:
-                        pass
+                        try:
+                            managers.remove(m)
+                        except:
+                            pass
     finally:
-        if conn in managers:
-            managers.remove(conn)
+        with managers_lock:  # <-- THÊM
+            if conn in managers:
+                managers.remove(conn)
         conn.close()
 
 def handle_client(conn, addr):
