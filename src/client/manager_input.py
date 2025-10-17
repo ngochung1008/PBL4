@@ -12,6 +12,7 @@ class ManagerInput:
         self.conn = conn
         self.viewer = viewer
         self._ignore = False  # khi True: không gửi những move đến server (dùng để tránh loop)
+        self.is_controlling = False  # Thêm trạng thái điều khiển
 
     def set_ignore(self, duration: float):
         """Tạm thời bỏ gửi local events trong duration giây."""
@@ -43,13 +44,25 @@ class ManagerInput:
         # Không dùng x,y từ pynput trực tiếp: lấy vị trí con trỏ trong viewer
         if not self.viewer:
             return
+        
+        # Kiểm tra xem chuột có trong vùng hiển thị không
         mapped = self.viewer.get_current_mapped_remote()
         if not mapped:
-            # ra khỏi vùng hiển thị -> không gửi
+            if self.is_controlling:
+                # Chuột vừa rời khỏi vùng điều khiển
+                self.is_controlling = False
+                print("[MANAGER INPUT] Mouse left control area")
             return
+        
+        if not self.is_controlling:
+            # Chuột vừa vào vùng điều khiển
+            self.is_controlling = True
+            print("[MANAGER INPUT] Mouse entered control area")
+        
+        # Gửi tọa độ chỉ khi đang trong vùng điều khiển
         scaled_x, scaled_y = mapped
         self.send_event({
-            "device": "mouse",
+            "device": "mouse", 
             "type": "move",
             "x": scaled_x,
             "y": scaled_y
