@@ -6,11 +6,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 
-from ui_components import (
+from src.gui.ui_components import (
     DARK_BG, create_card, create_title, create_input,
     create_primary_button, create_back_button
 )
 
+from src.client.auth import client_login
 
 class SignUpWindow(QWidget):
     def __init__(self):
@@ -96,7 +97,7 @@ class SignUpWindow(QWidget):
         right_img.setStyleSheet(f"background-color: {DARK_BG};")
         right_img.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        pixmap = QPixmap(r"H:\pbl4\PBL4\image\image.png")
+        pixmap = QPixmap("image/image.png")
         if not pixmap.isNull():
             right_img.setPixmap(pixmap)
             right_img.setScaledContents(True)
@@ -109,14 +110,14 @@ class SignUpWindow(QWidget):
     def sign_up(self):
         username = self.user_input.text().strip()
         password = self.pass_input.text().strip()
+        
         if not username or not password:
             QMessageBox.warning(self, "Error", "Please fill in all fields!")
             return
-        QMessageBox.information(self, "Success", f"Account created for {username}!")
+        token = client_login(username, password) 
+        if not token:
+            QMessageBox.critical(None, "Error", "Sign in failed! Check your credentials.")
+            return
+        QMessageBox.information(None, "Success", f"Account created for {username}!")
 
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = SignUpWindow()
-    win.showMaximized()
-    sys.exit(app.exec())

@@ -1,6 +1,6 @@
 import socket
 import struct
-from ...config import server_config
+from config import server_config
 
 HOST = server_config.SERVER_IP   # IP của server (chạy local thì giữ nguyên)
 PORT = server_config.SERVER_HOST  # port server lắng nghe
