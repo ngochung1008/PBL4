@@ -10,8 +10,9 @@ class ManagerInput:
     Gửi sự kiện dưới dạng JSON qua socket kết nối với Server
     """
 
-    def __init__(self, conn):
+    def __init__(self, conn, viewer=None):
         self.conn = conn
+        self.viewer = viewer
 
     def send_event(self, event: dict):
         """Gửi sự kiện dạng JSON"""
@@ -24,22 +25,39 @@ class ManagerInput:
 
     # ================== Mouse ==================
     def on_move(self, x, y):
+        try:
+                scale_x = getattr(self.viewer, "scale_x", 1.0) if self.viewer else 1.0
+                scale_y = getattr(self.viewer, "scale_y", 1.0) if self.viewer else 1.0
+                scaled_x = int(x * scale_x)
+                scaled_y = int(y * scale_y)
+        except Exception:
+            scaled_x = int(x)
+            scaled_y = int(y)
+
         self.send_event({
             "device": "mouse",
             "type": "move",
-            "x": x,
-            "y": y
+            "x": scaled_x,
+            "y": scaled_y
         })
 
     def on_click(self, x, y, button, pressed):
         btn = str(button).replace("Button.", "")
+        try:
+                scale_x = getattr(self.viewer, "scale_x", 1.0) if self.viewer else 1.0
+                scale_y = getattr(self.viewer, "scale_y", 1.0) if self.viewer else 1.0
+                sx = int(x * scale_x)
+                sy = int(y * scale_y)
+        except Exception:
+            sx, sy = int(x), int(y)
+
         self.send_event({
             "device": "mouse",
             "type": "click",
             "button": btn,
             "pressed": pressed,
-            "x": x,
-            "y": y
+            "x": sx,
+            "y": sy
         })
 
     def on_scroll(self, x, y, dx, dy):

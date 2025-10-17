@@ -19,24 +19,26 @@ class ServerScreen:
                 except:
                     print("[SERVER SCREEN] Manager disconnected")
                     self.managers.remove(m)
+    
+    def _recv_exact(self, conn, n):
+        data = b""
+        while len(data) < n:
+            chunk = conn.recv(n - len(data))
+            if not chunk:
+                raise ConnectionError("Lost connection")
+            data += chunk
+        return data
 
     def handle_client(self, conn, addr):
         """Nhận dữ liệu màn hình từ Client và phát lại cho managers"""
         print("[SERVER SCREEN] Client stream connected:", addr)
         try:
             while True:
-                header = conn.recv(4)
-                if not header:
-                    break
-                (length,) = struct.unpack(">I", header)
-                payload = b""
-                while len(payload) < length:
-                    chunk = conn.recv(length - len(payload))
-                    if not chunk:
-                        break
-                    payload += chunk
-                if not payload:
-                    break
+                # Nhận header 12 byte: width(4), height(4), length(4)
+                header = self._recv_exact(conn, 12)
+                w, h, length = struct.unpack(">III", header)
+
+                payload = self._recv_exact(conn, length)
 
                 # Gửi lại cho managers (gồm header + ảnh)
                 self.broadcast_to_managers(header + payload)
