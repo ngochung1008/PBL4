@@ -118,4 +118,5 @@ def start_server():
         threading.Thread(target=client_thread, args=(conn, addr), daemon=True).start()
 
 if __name__ == "__main__":
+    print(auth.get_user_by_sessionid("d3e6d5c2-ab5d-11f0-87af-005056c00001"))
     start_server()

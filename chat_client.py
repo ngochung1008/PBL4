@@ -2,28 +2,23 @@ import sys
 import threading
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
+from src.gui.signin import SignInWindow
+from src.server.auth import get_user_by_sessionid, sign_in
+import mysql.connector
 
-global token
-token = None
-
-def check_login(win):
-    while not win.token:
-        pass
-    print(f"Received token: {win.token}")
-    global token
-    token = win.token
-    QTimer.singleShot(0, win.dong)
-        
 if __name__ == "__main__":
-    
-    from src.gui.signin import SignInWindow
-    app = QApplication(sys.argv)
-    win = SignInWindow()
-    threading.Thread(target=check_login, args=(win, ), daemon=True).start()
-    win.showMaximized()
-    sys.exit(app.exec())
-    print("Application closed")
-    while token is None:
-        pass
-    print(f"Final token: {token}")
+    print("Connecting to DB...")
+    conn = mysql.connector.connect(
+        host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
+        user="root",            # Tài khoản MySQL
+        password="root",# Mật khẩu MySQL
+        database="pbl4"       # Tên database muốn dùng
+    )
+    print("✅ Connected to DB")
 
+    print(sign_in("admin", "admin12"))
+    print(get_user_by_sessionid("d3e6d5c2-ab5d-11f0-87af-005056c00001"))
+    # app = QApplication(sys.argv)
+    # win = SignInWindow()
+    # win.showMaximized()
+    # sys.exit(app.exec())

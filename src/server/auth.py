@@ -104,6 +104,38 @@ def create_session(user_name, ip, mac_ip):
             cursor.close()
             conn.close()
 
+def get_user_by_sessionid(sesion_id):
+    print("Fetching user for SessionID:", sesion_id)
+    try:
+        print("Connecting to DB...")
+        conn = mysql.connector.connect(
+            host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
+            user="root",            # Tài khoản MySQL
+            password="root",# Mật khẩu MySQL
+            database="pbl4"       # Tên database muốn dùng
+        )
+        print("✅ Connected to DB")
+
+        query = "SELECT SessionID FROM Session WHERE SessionID = %s"
+        cursor1 = conn.cursor()
+        cursor1.execute(query, (sesion_id,))
+        result = cursor1.fetchone()
+        
+        if not result:
+            raise ValueError("User không tồn tại")
+        
+        user_id = result[0]
+        print(user_id)
+        
+        return user_id
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return None
+    finally:
+        if conn.is_connected():
+            cursor1.close()
+            conn.close()
 
         
 # print(sign_in("admin", "admin123"))
