@@ -1,10 +1,9 @@
-# client_controller.py
-
 import socket
 import json
 import threading
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyboardController, Key
+import time
 
 class ClientController:
     def __init__(self, host, port):
@@ -12,11 +11,15 @@ class ClientController:
         self.port = port
         self.mouse = MouseController()
         self.keyboard = KeyboardController()
+        self._running = True
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((self.host, self.port))
             print("[CLIENT CONTROLLER] Connected to server")
+
+            # start sender thread to send cursor updates periodically
+            threading.Thread(target=self._send_cursor_updates, args=(sock,), daemon=True).start()
 
             buffer = b""
             while True:
@@ -37,6 +40,25 @@ class ClientController:
                     except Exception as e:
                         print("[CLIENT CONTROLLER] Parse error:", e)
 
+    def _send_cursor_updates(self, sock):
+        """Gửi định kỳ vị trí con chuột của client lên server để manager có thể hiển thị."""
+        try:
+            while True:
+                x, y = self.mouse.position
+                msg = json.dumps({
+                    "device": "mouse",
+                    "type": "cursor_update",
+                    "x": int(x),
+                    "y": int(y)
+                }) + "\n"
+                try:
+                    sock.sendall(msg.encode("utf-8"))
+                except Exception:
+                    # socket có thể đã đóng
+                    break
+                time.sleep(0.2)
+        except Exception:
+            pass
 
     def handle_event(self, event):
         if event["device"] == "mouse":
@@ -48,6 +70,12 @@ class ClientController:
     def handle_mouse(self, event):
         if event["type"] == "move":
             self.mouse.position = (event["x"], event["y"])
+        elif event["type"] == "set_position":
+            # Sync ban đầu: đặt con trỏ client về vị trí manager yêu cầu
+            try:
+                self.mouse.position = (event["x"], event["y"])
+            except Exception as e:
+                print("[CLIENT CONTROLLER] Set position error:", e)
         elif event["type"] == "click":
             btn = self._map_button(event["button"])
             if btn:
