@@ -5,9 +5,12 @@ import struct
 import io
 from PIL import Image
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
-from PyQt6.QtGui import QPixmap, QImage
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
+from PyQt6.QtGui import QPixmap, QImage, QCursor
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QPoint
 import sys
+import math
+import threading
+import time
 
 class ScreenReceiver(QThread):
     frame_received = pyqtSignal(object)
@@ -76,15 +79,31 @@ class ManagerViewer(QWidget):
         self.setGeometry(100, 100, 960, 540)
         self.label = QLabel("Đang nhận hình ảnh từ client...", self)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setStyleSheet("background-color: black;")
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.label)
         self.setLayout(layout)
 
+        # remote sizes
         self.remote_width = 1
         self.remote_height = 1
-        self.scale_x = 1.0
-        self.scale_y = 1.0
+
+        # displayed image geometry in label
+        self.display_w = 0
+        self.display_h = 0
+        self.offset_x = 0
+        self.offset_y = 0
+
+        # scale ratios (remote -> displayed)
+        self.ratio_x = 1.0
+        self.ratio_y = 1.0
+
+        # overlay cursor representing remote client's pointer
+        self.cursor_label = QLabel(self.label)
+        self.cursor_label.setFixedSize(12, 12)
+        self.cursor_label.setStyleSheet("background: red; border-radius: 6px; border: 2px solid white;")
+        self.cursor_label.hide()
 
         # Tạo luồng nhận hình
         self.receiver = ScreenReceiver(self.host, self.port)
@@ -97,13 +116,24 @@ class ManagerViewer(QWidget):
         qimg, w, h = frame_info
         self.remote_width = w
         self.remote_height = h
-        label_size = self.label.size()
-        self.scale_x = w / max(1, label_size.width())
-        self.scale_y = h / max(1, label_size.height())
+
+        # tạo pixmap và scale đúng vào label theo KeepAspectRatio
         pixmap = QPixmap.fromImage(qimg)
-        self.label.setPixmap(pixmap.scaled(
+        label_size = self.label.size()
+        scaled = pixmap.scaled(
             label_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
-        ))
+        )
+        self.label.setPixmap(scaled)
+
+        # tính kích thước hiển thị và offset (để tính mapping chính xác)
+        self.display_w = scaled.width()
+        self.display_h = scaled.height()
+        self.offset_x = max(0, (label_size.width() - self.display_w) // 2)
+        self.offset_y = max(0, (label_size.height() - self.display_h) // 2)
+
+        # tỷ lệ remote -> displayed
+        self.ratio_x = self.display_w / max(1, self.remote_width)
+        self.ratio_y = self.display_h / max(1, self.remote_height)
 
     def resizeEvent(self, event):
         if self.label.pixmap():
@@ -114,11 +144,63 @@ class ManagerViewer(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 )
             )
-        # Update scale_x/scale_y on resize
-        if self.remote_width > 0 and self.remote_height > 0:
-            label_size = self.label.size()
-            self.scale_x = self.remote_width / max(1, label_size.width())
-            self.scale_y = self.remote_height / max(1, label_size.height())
+            # update display geometry on resize
+            self.display_w = self.label.pixmap().width()
+            self.display_h = self.label.pixmap().height()
+            self.offset_x = max(0, (self.label.size().width() - self.display_w) // 2)
+            self.offset_y = max(0, (self.label.size().height() - self.display_h) // 2)
+            if self.remote_width > 0:
+                self.ratio_x = self.display_w / max(1, self.remote_width)
+            if self.remote_height > 0:
+                self.ratio_y = self.display_h / max(1, self.remote_height)
+
+        super().resizeEvent(event)
+
+    # --- mapping helpers ---
+    def label_coords_to_remote(self, lx, ly):
+        """Chuyển tọa độ (trong label) -> tọa độ remote pixel.
+           Trả về (rx, ry) hoặc None nếu nằm ngoài vùng hình ảnh."""
+        # đưa về tọa độ trong vùng ảnh
+        rx_in = lx - self.offset_x
+        ry_in = ly - self.offset_y
+        if rx_in < 0 or ry_in < 0 or rx_in >= self.display_w or ry_in >= self.display_h:
+            return None
+        remote_x = int(rx_in / max(1.0, self.ratio_x))
+        remote_y = int(ry_in / max(1.0, self.ratio_y))
+        # clamp
+        remote_x = max(0, min(self.remote_width - 1, remote_x))
+        remote_y = max(0, min(self.remote_height - 1, remote_y))
+        return remote_x, remote_y
+
+    def remote_to_label_coords(self, remote_x, remote_y):
+        """Chuyển tọa độ remote -> vị trí trong label (pixels)."""
+        lx = self.offset_x + int(remote_x * self.ratio_x)
+        ly = self.offset_y + int(remote_y * self.ratio_y)
+        return lx, ly
+
+    def get_current_mapped_remote(self):
+        """Lấy vị trí con trỏ hiện tại trên màn hình manager, map về remote.
+           Trả về (remote_x, remote_y) hoặc None nếu con trỏ nằm ngoài vùng hiển thị remote."""
+        global_pos = QCursor.pos()
+        label_pos = self.label.mapFromGlobal(global_pos)
+        if label_pos is None:
+            return None
+        lx, ly = label_pos.x(), label_pos.y()
+        return self.label_coords_to_remote(lx, ly)
+
+    def show_remote_cursor(self, remote_x, remote_y):
+        """Hiển thị overlay con trỏ vị trí remote trên label."""
+        if self.remote_width <= 0 or self.remote_height <= 0:
+            return
+        lx, ly = self.remote_to_label_coords(remote_x, remote_y)
+        # đặt vị trí sao cho con trỏ nằm giữa label
+        w = self.cursor_label.width()
+        h = self.cursor_label.height()
+        self.cursor_label.move(max(0, lx - w // 2), max(0, ly - h // 2))
+        self.cursor_label.show()
+
+    def hide_remote_cursor(self):
+        self.cursor_label.hide()
 
     def on_connection_lost(self, msg):
         self.label.setText(f"Mất kết nối tới client: {msg}")

@@ -14,12 +14,14 @@ CONTROL_PORT = 9010   # Manager -> Server
 CLIENT_PORT = 9011    # Server -> Client
 SCREEN_PORT = 5000    # Client - Server (stream màn hình)
 clients = []  # list kết nối client (chỉ 1 hoặc nhiều)
+managers = []  # list kết nối manager (control channel)
 
 # ========================
 # SERVER CONTROL
 # ========================
 def handle_manager(conn, addr):
     print("[SERVER] Manager connected:", addr)
+    managers.append(conn)
     try:
         while True:
             data = conn.recv(4096)
@@ -30,8 +32,13 @@ def handle_manager(conn, addr):
                 try:
                     c.sendall(data)
                 except:
-                    clients.remove(c)
+                    try:
+                        clients.remove(c)
+                    except:
+                        pass
     finally:
+        if conn in managers:
+            managers.remove(conn)
         conn.close()
 
 def handle_client(conn, addr):
@@ -39,11 +46,23 @@ def handle_client(conn, addr):
     clients.append(conn)
     try:
         while True:
-            data = conn.recv(1024)
+            data = conn.recv(4096)
             if not data:
                 break
+            # Khi client gửi (ví dụ cursor_update), forward cho tất cả manager
+            for m in list(managers):
+                try:
+                    m.sendall(data)
+                except:
+                    try:
+                        managers.remove(m)
+                    except:
+                        pass
     finally:
-        clients.remove(conn)
+        try:
+            clients.remove(conn)
+        except:
+            pass
         conn.close()
 
 def start_control_server():
@@ -76,4 +95,4 @@ if __name__ == "__main__":
 
     # chạy screen server relay Client <-> Manager
     screen_server = ServerScreen("0.0.0.0", SCREEN_PORT)
-    screen_server.run()
+    screen_server.run()  
