@@ -12,6 +12,7 @@ class ClientController:
         self.mouse = MouseController()
         self.keyboard = KeyboardController()
         self._running = True
+        self._suppress_until = 0.0   # khi set, tạm không gửi cursor_update
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -44,6 +45,11 @@ class ClientController:
         """Gửi định kỳ vị trí con chuột của client lên server để manager có thể hiển thị."""
         try:
             while True:
+                # nếu vừa được remote set vị trí thì tạm không gửi để tránh vòng lặp
+                if time.time() < getattr(self, "_suppress_until", 0):
+                    time.sleep(0.05)
+                    continue
+
                 x, y = self.mouse.position
                 msg = json.dumps({
                     "device": "mouse",
@@ -70,11 +76,17 @@ class ClientController:
     def handle_mouse(self, event):
         if event["type"] == "move":
             if "x" in event and "y" in event:
-                self.mouse.position = (event["x"], event["y"])
+                # khi lệnh move đến từ manager (remote), đặt con trỏ và tạm ngắt gửi cursor_update
+                try:
+                    self.mouse.position = (event["x"], event["y"])
+                    # tạm dừng gửi cursor_update trong 200-300ms để tránh feedback loop
+                    self._suppress_until = time.time() + 0.25
+                except Exception as e:
+                    print("[CLIENT] Set position error:", e)
         elif event["type"] == "set_position":
-            # Sync vị trí chuột ban đầu
             try:
                 self.mouse.position = (event["x"], event["y"])
+                self._suppress_until = time.time() + 0.25
             except Exception as e:
                 print("[CLIENT] Set position error:", e)
         elif event["type"] == "click":

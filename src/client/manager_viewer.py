@@ -164,7 +164,7 @@ class ManagerViewer(QWidget):
         lx, ly = label_pos.x(), label_pos.y()
         return self.label_coords_to_remote(lx, ly)
 
-    def show_remote_cursor(self, remote_x, remote_y, move_system_cursor: bool = True):
+    def show_remote_cursor(self, remote_x, remote_y, move_system_cursor: bool = False):
         if self.remote_width <= 0 or self.remote_height <= 0:
             return
         lx, ly = self.remote_to_label_coords(remote_x, remote_y)
@@ -173,6 +173,8 @@ class ManagerViewer(QWidget):
         self.cursor_label.move(max(0, lx - w // 2), max(0, ly - h // 2))
         self.cursor_label.show()
 
+        # Chỉ di chuyển con trỏ hệ thống khi rõ ràng muốn do hành động local,
+        # tránh auto-move mỗi khi nhận cursor_update từ client.
         if move_system_cursor:
             try:
                 if self.input_handler:
