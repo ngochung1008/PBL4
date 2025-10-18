@@ -5,6 +5,8 @@ import socket
 import sys
 import json
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QCursor
+import time
 from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
 
@@ -83,7 +85,6 @@ if __name__ == "__main__":
     threading.Thread(target=input_handler.run, daemon=True).start()
 
     # Wait until viewer received at least one frame (để mapping khả dụng) - tối đa 5s
-    import time
     waited = 0.0
     while waited < 5.0:
         app.processEvents()
