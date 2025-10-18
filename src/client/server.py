@@ -4,10 +4,7 @@ import socket
 import threading
 import struct
 import io
-import cv2
-import numpy as np
 from PIL import Image
-import threading
 from server_screen import ServerScreen   # import module screen
 
 CONTROL_PORT = 9010   # Manager -> Server
@@ -57,33 +54,36 @@ def handle_manager(conn, addr):
 
 def handle_client(conn, addr):
     print("[SERVER] Client connected:", addr)
-    clients.append(conn)
+    with clients_lock:
+        clients.append(conn)
     try:
         while True:
             data = conn.recv(4096)
             if not data:
                 break
             # Khi client gửi (ví dụ cursor_update), forward cho tất cả manager
-            for m in list(managers):
-                try:
-                    m.sendall(data)
-                except:
+            with managers_lock:
+                for m in list(managers):
                     try:
-                        managers.remove(m)
+                        m.sendall(data)
                     except:
-                        pass
+                        try:
+                            managers.remove(m)
+                        except:
+                            pass
     finally:
-        try:
-            clients.remove(conn)
-        except:
-            pass
+        with clients_lock:
+            try:
+                clients.remove(conn)
+            except ValueError:
+                pass
         conn.close()
 
 def start_control_server():
     # Manager input
     sm = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sm.bind(("0.0.0.0", CONTROL_PORT))
-    sm.listen(1)
+    sm.listen(5)
     print(f"[SERVER] Listening for manager on port {CONTROL_PORT}")
 
     # Client input

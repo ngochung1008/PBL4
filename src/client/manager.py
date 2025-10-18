@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication
 from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
 
-SERVER_HOST = "10.10.30.141"
+SERVER_HOST = "10.248.230.77"
 CONTROL_PORT = 9010   # gửi input tới server
 SCREEN_PORT = 5000    # nhận màn hình từ server
 

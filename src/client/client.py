@@ -4,7 +4,7 @@ import threading
 from client_controller import ClientController
 from client_screen import ClientScreen
 
-SERVER_HOST = "10.10.30.141"
+SERVER_HOST = "10.248.230.77"
 CONTROL_PORT = 9010   # Manager -> Server (chỉ Manager dùng)
 CLIENT_PORT = 9011    # Client nhận input từ Server
 SCREEN_PORT = 5000    # gửi màn hình tới server
