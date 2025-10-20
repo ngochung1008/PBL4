@@ -1,3 +1,5 @@
+# manager_viewer.py
+
 from PIL import Image
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt6.QtGui import QPixmap, QImage, QCursor
@@ -5,18 +7,21 @@ from PyQt6.QtCore import QThread, pyqtSignal, Qt, QPoint
 import socket, struct, io, time
 from PIL import Image
 
+# Lớp nhận frame qua socket trong thread riêng
 class ScreenReceiver(QThread):
+    # frame_received: phát khi nhận được một frame mới.
     frame_received = pyqtSignal(object)   # (qimage, w, h)
+    # connection_lost: phát khi socket lỗi / kết nối mất; truyền thông báo lỗi dạng chuỗi.
     connection_lost = pyqtSignal(str)
 
     def __init__(self, host, port, parent=None):
         super().__init__(parent)
         self.host = host
         self.port = port
-        self._running = True
+        self._running = True # flag để điều khiển vòng lặp run()
 
     def recv_all(self, sock, n):
-        data = b""
+        data = b"" # Khởi tạo buffer rỗng
         while len(data) < n:
             packet = sock.recv(n - len(data))
             if not packet:
@@ -27,29 +32,38 @@ class ScreenReceiver(QThread):
     def run(self):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.connect((self.host, self.port))
-                sock.sendall(b"MGR:")  # handshake
+                sock.connect((self.host, self.port)) # kết nối tới server
+                sock.sendall(b"MGR:")  # handshake 
                 while self._running:
                     header = self.recv_all(sock, 12)
                     if not header:
                         break
+                    """ Nhận header gồm (width, height, length) 
+                    Sử dụng thư viện struct để giải nén 12 byte header thành ba số nguyên 
+                    32-bit không dấu (I) theo thứ tự big-endian (>). Ba giá trị này là: 
+                    chiều rộng (w), chiều cao (h), và độ dài của dữ liệu hình ảnh (length). """
                     w, h, length = struct.unpack(">III", header)
                     data = self.recv_all(sock, length)
                     if not data:
                         break
+                    # Giải mã hình ảnh từ bytes sang QImage
                     img = Image.open(io.BytesIO(data)).convert("RGB")
-                    bytes_per_line = 3 * img.width
+                    bytes_per_line = 3 * img.width # mỗi pixel có 3 byte (RGB)
+                    # Tạo QImage từ dữ liệu hình ảnh
                     qimg = QImage(img.tobytes(), img.width, img.height, 
                                 bytes_per_line, QImage.Format.Format_RGB888)
-                    qimg = qimg.copy()  # <-- THÊM này để đảm bảo buffer
+                    qimg = qimg.copy()
+                    """Phát ra một tín hiệu (signal), mang theo QImage đã xử lý, chiều rộng (w) và chiều cao (h)."""
                     self.frame_received.emit((qimg, w, h))
         except Exception as e:
+            """Phát ra tín hiệu thông báo lỗi khi kết nối bị mất."""
             self.connection_lost.emit(str(e))
+            self.quit()
 
     def stop(self):
         self._running = False
 
-
+# Lớp UI chính hiển thị frame và con trỏ remote
 class ManagerViewer(QWidget):
     def __init__(self, host, port):
         super().__init__()

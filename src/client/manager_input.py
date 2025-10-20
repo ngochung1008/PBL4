@@ -1,3 +1,5 @@
+# manager_input.py
+
 import json
 import threading
 from pynput import mouse, keyboard

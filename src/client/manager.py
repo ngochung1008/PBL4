@@ -29,7 +29,7 @@ def start_recv_loop(sock, viewer):
                     ev = json.loads(line.decode("utf-8"))
                     if ev.get("device") == "mouse" and ev.get("type") == "cursor_update":
                         # chỉ hiển thị overlay; không auto-move hệ thống để tránh client "chiếm" con trỏ
-                        viewer.show_remote_cursor(int(ev["x"]), int(ev["y"]), move_system_cursor=False)
+                        viewer.show_remote_cursor(int(ev["x"]), int(ev["y"]), move_system_cursor=True)
                     # có thể xử lý thêm event khác nếu cần
                 except Exception as e:
                     print("[MANAGER] Parse error:", e)
