@@ -6,16 +6,19 @@ import sys
 import json
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QCursor
+from PyQt6.QtCore import QThread
 import time
 from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
+# Ghi chú: Thư viện socket đã được sử dụng đúng cách
+# Ghi chú: Sử dụng QThread để xử lý event loop của UI (app.exec())
 
-SERVER_HOST = "10.248.230.77"
-CONTROL_PORT = 9010   # gửi input tới server
+SERVER_HOST = "10.10.26.93"
+CONTROL_PORT = 9010   # gửi input tới server và nhận event từ server
 SCREEN_PORT = 5000    # nhận màn hình từ server
 
+# Hàm này xử lý các gói JSON (chủ yếu là cursor_update) được Server forward từ Client.
 def start_recv_loop(sock, viewer):
-    """Nhận các event từ client (qua server) và cập nhật viewer (ví dụ cursor_update)."""
     buffer = b""
     try:
         while True:
@@ -28,63 +31,48 @@ def start_recv_loop(sock, viewer):
                 try:
                     ev = json.loads(line.decode("utf-8"))
                     if ev.get("device") == "mouse" and ev.get("type") == "cursor_update":
-                        # chỉ hiển thị overlay; không auto-move hệ thống để tránh client "chiếm" con trỏ
+                        # Hiển thị chấm đỏ và di chuyển con trỏ hệ thống (move_system_cursor=True)
                         viewer.show_remote_cursor(int(ev["x"]), int(ev["y"]), move_system_cursor=True)
                     # có thể xử lý thêm event khác nếu cần
                 except Exception as e:
                     print("[MANAGER] Parse error:", e)
     except Exception as e:
         print("[MANAGER] Receive loop error:", e)
-    print("[MANAGER] Receiver loop ended.")
+    
+    """ Khi luồng nhận (từ Server) bị ngắt (do Server/Client đóng), 
+    hiển thị thông báo và đóng cửa sổ ManagerViewer."""
+    print("[MANAGER] Receiver loop ended. Closing viewer.")
+    viewer.on_connection_lost("Kết nối input/server bị mất.")
+    viewer.close() # Đóng cửa sổ (sẽ kích hoạt closeEvent)
 
 if __name__ == "__main__":
-    # Khởi tạo QApplication trước
+    # Khởi tạo QApplication 
     app = QApplication(sys.argv)
 
-    # Viewer handler (nhận màn hình từ server) - tạo trước để truyền vào input handler
+    # Khởi tạo Viewer (nhận màn hình)
     viewer = ManagerViewer(SERVER_HOST, SCREEN_PORT)
-    viewer.show()
 
-    # Kết nối tới server để gửi input
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((SERVER_HOST, CONTROL_PORT))
-    print("[MANAGER] Connected to server for input")
+    # Xử lý kết nối Input/Cursor
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((SERVER_HOST, CONTROL_PORT))
+        print("[MANAGER] Connected to server for input")
+    except Exception as e:
+        print(f"[MANAGER] Could not connect to input server: {e}")
+        sys.exit(1) # Thoát nếu không kết nối được
 
-    # Input handler (gửi sự kiện bàn phím/chuột) - truyền viewer để dùng scale nếu cần
+    viewer.show()  # Hiển thị cửa sổ viewer
+
+    # Input handler (gửi sự kiện bàn phím/chuột)
     input_handler = ManagerInput(sock, viewer=viewer)
 
-    # Gắn input handler vào viewer để viewer có thể tạm vô hiệu hoá khi đặt con trỏ hệ thống
+    # Lưu sock input vào viewer để có thể đóng khi cửa sổ viewer đóng
+    viewer.input_socket = sock
+
+    # Gắn input handler vào viewer để viewer có thể tạm vô hiệu hoá
     viewer.set_input_handler(input_handler)
 
-    # Chờ frame đầu tiên để có thể map tọa độ
-    while not viewer.remote_width > 1:
-        app.processEvents()
-        time.sleep(0.1)
-
-    # Lấy vị trí chuột hiện tại của manager
-    current_pos = QCursor.pos()
-    label_pos = viewer.label.mapFromGlobal(current_pos)
-    
-    # Map sang tọa độ remote
-    if label_pos:
-        mapped = viewer.label_coords_to_remote(label_pos.x(), label_pos.y())
-        if mapped:
-            # Gửi sync event với vị trí chuột của manager
-            sync_event = {
-                "device": "mouse",
-                "type": "set_position",
-                "x": mapped[0],
-                "y": mapped[1]
-            }
-            sock.sendall((json.dumps(sync_event) + "\n").encode())
-
-    # Start receiver thread to get client -> manager forwarded events
-    threading.Thread(target=start_recv_loop, args=(sock, viewer), daemon=True).start()
-
-    # Khởi listener cho input (trong thread)
-    threading.Thread(target=input_handler.run, daemon=True).start()
-
-    # Wait until viewer received at least one frame (để mapping khả dụng) - tối đa 5s
+    # Chờ frame đầu tiên để có thể map tọa độ (đảm bảo remote_width có giá trị)
     waited = 0.0
     while waited < 5.0:
         app.processEvents()
@@ -93,14 +81,21 @@ if __name__ == "__main__":
         time.sleep(0.05)
         waited += 0.05
 
-    # Send initial sync: lấy vị trí hiện tại trên viewer (nếu nằm trong vùng hiển thị)
+    # Gửi initial set_position sync để đồng bộ con trỏ Client với Manager
     mapped = viewer.get_current_mapped_remote()
     if mapped:
         try:
             sync_event = {"device": "mouse", "type": "set_position", "x": mapped[0], "y": mapped[1]}
             sock.sendall((json.dumps(sync_event) + "\n").encode("utf-8"))
-            print("[MANAGER] Sent initial set_position sync:", sync_event)
+            print("[MANAGER] Sent initial set_position sync.")
         except Exception as e:
             print("[MANAGER] Sync send error:", e)
+    
+    # Bắt đầu luồng nhận các sự kiện Client (cursor_update)
+    threading.Thread(target=start_recv_loop, args=(sock, viewer), daemon=True).start()
 
+    # Khởi listener cho input (pynput)
+    threading.Thread(target=input_handler.run, daemon=True).start() 
+
+    # Chạy vòng lặp chính của UI
     sys.exit(app.exec())

@@ -1,20 +1,21 @@
 # manager_input.py
 
+from pynput import mouse, keyboard
 import json
 import threading
-from pynput import mouse, keyboard
 
+""" Lớp quản lý input của Manager (chuột + bàn phím) 
+Gửi sự kiện dưới dạng JSON qua socket kết nối với Server"""
 class ManagerInput:
-    """
-    Lớp quản lý input của Manager (chuột + bàn phím)
-    Gửi sự kiện dưới dạng JSON qua socket kết nối với Server
-    """
-
     def __init__(self, conn, viewer=None):
-        self.conn = conn
-        self.viewer = viewer
-        self._ignore = False  # khi True: không gửi những move đến server (dùng để tránh loop)
-        self.is_controlling = False  # Thêm trạng thái điều khiển
+        self.conn = conn # socket kết nối tới Server
+        """viewer: ManagerViewer: cho phép gọi hàm viewer.get_current_mapped_remote() để chuyển tọa độ chuột cục bộ thành tọa độ remote."""
+        self.viewer = viewer # tham chiếu tới ManagerViewer (để lấy kích thước vùng hiển thị)"""
+        """self._ignore: Cờ bảo vệ chống lại vòng lặp phản hồi (feedback loop). 
+        Khi ManagerViewer tự động di chuyển con trỏ chuột cục bộ (sau khi nhận cập nhật con trỏ từ Client), 
+        cờ này được đặt thành True để ngăn ManagerInput gửi sự kiện di chuyển tự động đó ngược lại cho Client."""
+        self._ignore = False  
+        self.is_controlling = False  # Theo dõi trạng thái chuột đang nằm trong vùng hiển thị remote
 
     def set_ignore(self, duration: float):
         """Tạm thời bỏ gửi local events trong duration giây."""
@@ -22,6 +23,7 @@ class ManagerInput:
             self._ignore = True
             def _clear():
                 self._ignore = False
+            # ... (Sử dụng threading.Timer để đặt _ignore = True, sau duration thì đặt lại thành False)
             t = threading.Timer(duration, _clear)
             t.daemon = True
             t.start()
@@ -29,15 +31,17 @@ class ManagerInput:
             print("[MANAGER INPUT] set_ignore error:", e)
 
     def send_event(self, event: dict):
-        """Gửi sự kiện dạng JSON"""
+        """ Gửi sự kiện dạng JSON
+        vd Dictionary này được chuyển thành chuỗi JSON 
+        (ví dụ: {"device": "mouse", "type": "move", "x": 500, "y": 300}) """
         if self._ignore:
             return
         try:
+            # ... (Chuyển đổi dictionary event thành chuỗi JSON và thêm '\n' để phân tách)
             msg = (json.dumps(event) + "\n").encode("utf-8")
-            # thêm \n để phân tách gói khi gửi liên tục
             self.conn.sendall(msg)
         except Exception as e:
-            print("[MANAGER INPUT] Send error:", e)
+            print("[MANAGER INPUT] send_event error:", e)
 
     # ================== Mouse ==================
     def on_move(self, x, y):
@@ -47,21 +51,22 @@ class ManagerInput:
         if not self.viewer:
             return
         
-        # Kiểm tra xem chuột có trong vùng hiển thị không
+        # 1. Lấy tọa độ remote tương ứng với vị trí con trỏ CỤC BỘ của Manager
         mapped = self.viewer.get_current_mapped_remote()
+        # Kiểm tra xem chuột có trong vùng hiển thị không
         if not mapped:
             if self.is_controlling:
                 # Chuột vừa rời khỏi vùng điều khiển
                 self.is_controlling = False
-                print("[MANAGER INPUT] Mouse left control area")
+                print("[MANAGER INPUT] Mouse out of control area")
             return
         
         if not self.is_controlling:
             # Chuột vừa vào vùng điều khiển
             self.is_controlling = True
-            print("[MANAGER INPUT] Mouse entered control area")
+            print("[MANAGER INPUT] Mouse into control area")
         
-        # Gửi tọa độ chỉ khi đang trong vùng điều khiển
+        # 2. Gửi tọa độ (đã ánh xạ từ chuột Manager) đến Client
         scaled_x, scaled_y = mapped
         self.send_event({
             "device": "mouse", 
@@ -75,9 +80,11 @@ class ManagerInput:
             return
         if not self.viewer:
             return
+        
         mapped = self.viewer.get_current_mapped_remote()
         if not mapped:
             return
+        
         sx, sy = mapped
         btn = str(button).replace("Button.", "")
         self.send_event({
@@ -95,9 +102,11 @@ class ManagerInput:
         # gửi scroll chỉ khi trong vùng
         if not self.viewer:
             return
+        
         mapped = self.viewer.get_current_mapped_remote()
         if not mapped:
             return
+
         self.send_event({
             "device": "mouse",
             "type": "scroll",
@@ -108,6 +117,7 @@ class ManagerInput:
         })
 
     # ================== Keyboard ==================
+    # Được gọi ngay khi một phím bất kỳ trên bàn phím được nhấn xuống.
     def on_press(self, key):
         try:
             if hasattr(key, "char") and key.char is not None:
@@ -127,6 +137,7 @@ class ManagerInput:
         except Exception as e:
             print("[KEYBOARD] Press error:", e)
 
+    # Được gọi ngay khi một phím bất kỳ trên bàn phím được nhả ra (thả lên).
     def on_release(self, key):
         try:
             if hasattr(key, "char") and key.char is not None:
@@ -147,16 +158,18 @@ class ManagerInput:
     # ================== Run Listeners ==================
     def run(self):
         """Khởi động listener cho chuột + bàn phím"""
-        # Thay đoạn này:
         mouse_listener = mouse.Listener(
             on_move=self.on_move,
             on_click=self.on_click,
             on_scroll=self.on_scroll
         )
-        mouse_listener.start()  # dùng start() thay vì .run()
+        mouse_listener.start()  # Chạy trong một luồng riêng
 
         with keyboard.Listener(
             on_press=self.on_press,
             on_release=self.on_release
         ) as kl:
+            """ Khởi động listener bàn phím và giữ luồng hiện tại 
+            (thường là luồng được gọi ManagerInput.run() từ luồng chính) 
+            hoạt động để tiếp tục lắng nghe các sự kiện bàn phím """
             kl.join()
