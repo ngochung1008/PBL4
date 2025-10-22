@@ -3,13 +3,11 @@
 from pynput import mouse, keyboard
 import json
 import threading
-from client.config import THRESHOLD_DIST
 import config
 
 """ Lớp quản lý input của Manager (chuột + bàn phím) 
 Gửi sự kiện dưới dạng JSON qua socket kết nối với Server"""
 class ManagerInput:
-    THRESHOLD_DIST = config.THRESHOLD_DIST # ngưỡng khoảng cách (pixel) để gửi lệnh di chuyển chuột
 
     def __init__(self, conn, viewer=None):
         self.conn = conn # socket kết nối tới Server
@@ -75,11 +73,9 @@ class ManagerInput:
         
         # 2. Gửi tọa độ (đã ánh xạ từ chuột Manager) đến Client
         scaled_x, scaled_y = mapped
-        
-        thresholdDist = THRESHOLD_DIST
 
-        if (abs(scaled_x - self.last_remote_x) < thresholdDist and 
-            abs(scaled_y - self.last_remote_y) < thresholdDist):
+        if (abs(scaled_x - self.last_remote_x) < config.THRESHOLD_DIST_M and 
+            abs(scaled_y - self.last_remote_y) < config.THRESHOLD_DIST_M):
             return # Vị trí thay đổi quá ít, bỏ qua gửi lệnh
             
         self.last_remote_x = scaled_x # Cập nhật vị trí cuối cùng

@@ -74,11 +74,8 @@ class ClientController:
                 # 2. Lấy vị trí con trỏ chuột hiện tại (cục bộ)
                 x, y = self.mouse.position
 
-                # Đặt ngưỡng THRESHOLD_DIST_C = 3 pixel.
-                THRESHOLD_DIST_C = 3
-                
-                if (abs(x - self.last_client_x) < THRESHOLD_DIST_C and 
-                    abs(y - self.last_client_y) < THRESHOLD_DIST_C):
+                if (abs(x - self.last_client_x) < config.THRESHOLD_DIST_C and
+                    abs(y - self.last_client_y) < config.THRESHOLD_DIST_C):
                     # Nếu vị trí không thay đổi đáng kể, bỏ qua gửi.
                     continue 
 
