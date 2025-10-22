@@ -22,7 +22,7 @@ class ProfileWindow(QWidget):
         self.resize(1000, 650)
         self.setStyleSheet(f"background-color: {DARK_BG}; color: {LIGHT_TEXT};")
 
-        # ✅ Lưu thông tin user và token
+        # Lưu thông tin user và token
         self.user = user
         self.token = token
         self.is_editing = False
@@ -58,7 +58,7 @@ class ProfileWindow(QWidget):
             }
         """)
 
-        # ✅ Nếu self.user là dict thì lấy key, nếu không thì dùng chuỗi
+        # Nếu self.user là dict thì lấy key, nếu không thì dùng chuỗi
         username = self.user.get("Username") if isinstance(self.user, dict) else str(self.user)
         fullname = self.user.get("FullName", "") if isinstance(self.user, dict) else ""
         email = self.user.get("Email", "") if isinstance(self.user, dict) else ""
