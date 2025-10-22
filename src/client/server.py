@@ -5,13 +5,15 @@ import threading
 import struct
 import io
 import sys
-from time import time
+import time
 from PIL import Image
 from server_screen import ServerScreen  
+import config
 
-CONTROL_PORT = 9010   # Manager -> Server
-CLIENT_PORT = 9011    # Server -> Client
-SCREEN_PORT = 5000    # Client - Server (stream màn hình)
+CONTROL_PORT = config.CONTROL_PORT
+CLIENT_PORT = config.CLIENT_PORT
+SCREEN_PORT = config.SCREEN_PORT
+
 clients = []  # list kết nối client
 managers = []  # list kết nối manager
 clients_lock = threading.Lock()  

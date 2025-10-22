@@ -6,6 +6,9 @@ import threading
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyboardController, Key
 import time
+import config 
+
+CLIENT_SUPPRESS_DURATION_S = config.CLIENT_SUPPRESS_DURATION_S
 
 class ClientController:
     def __init__(self, host, port):
@@ -15,6 +18,9 @@ class ClientController:
         self.keyboard = KeyboardController() # Đối tượng điều khiển bàn phím cục bộ
         self._running = True
         self._suppress_until = 0.0 # Cờ chống vòng lặp phản hồi (cursor_update)
+        # Vị trí client cuối cùng đã gửi
+        self.last_client_x = -1
+        self.last_client_y = -1
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -58,6 +64,8 @@ class ClientController:
     def _send_cursor_updates(self, sock):
         try:
             while True:
+                time.sleep(0.05) # Giảm sleep để kiểm tra nhanh hơn
+
                 # 1. Kiểm tra cờ chống vòng lặp
                 if time.time() < getattr(self, "_suppress_until", 0):
                     time.sleep(0.05)
@@ -65,6 +73,14 @@ class ClientController:
 
                 # 2. Lấy vị trí con trỏ chuột hiện tại (cục bộ)
                 x, y = self.mouse.position
+
+                if (abs(x - self.last_client_x) < config.THRESHOLD_DIST_C and
+                    abs(y - self.last_client_y) < config.THRESHOLD_DIST_C):
+                    # Nếu vị trí không thay đổi đáng kể, bỏ qua gửi.
+                    continue 
+
+                self.last_client_x = x 
+                self.last_client_y = y
 
                 # 3. Đóng gói JSON
                 msg = json.dumps({
@@ -80,7 +96,7 @@ class ClientController:
                 except Exception:
                     # socket có thể đã đóng
                     break
-                time.sleep(0.2) # Chờ 200ms trước khi cập nhật tiếp theo
+                # time.sleep(0.2) # Chờ 200ms trước khi cập nhật tiếp theo
         except Exception:
             pass
 
@@ -91,8 +107,8 @@ class ClientController:
                 # khi lệnh move đến từ manager (remote), đặt con trỏ và tạm ngắt gửi cursor_update
                 try:
                     self.mouse.position = (event["x"], event["y"])
-                    # tạm dừng gửi cursor_update trong 250ms để tránh feedback loop
-                    self._suppress_until = time.time() + 0.25 # Bật cờ chống vòng lặp phản hồi
+                    # tạm dừng gửi cursor_update trong 400ms để tránh feedback loop
+                    self._suppress_until = time.time() + CLIENT_SUPPRESS_DURATION_S # Bật cờ chống vòng lặp phản hồi
                 except Exception as e:
                     print("[CLIENT] Set (position) handle_mouse error:", e)
         elif event["type"] == "click":

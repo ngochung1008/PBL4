@@ -1,16 +1,17 @@
 # client.py
 
 import threading
-from time import time
+import time
 from client_controller import ClientController
 from client_screen import ClientScreen
 import sys
+import config
 
-SERVER_HOST = "10.10.26.93"
-CONTROL_PORT = 9010   # Manager -> Server 
-CLIENT_PORT = 9011    # Client nhận input từ Server
-SCREEN_PORT = 5000    # Gửi màn hình tới server
-FPS = 15  # Tốc độ khung hình/giây
+SERVER_HOST = config.SERVER_HOST
+CONTROL_PORT = config.CONTROL_PORT
+CLIENT_PORT = config.CLIENT_PORT
+SCREEN_PORT = config.SCREEN_PORT
+FPS = config.FPS
 
 # Vòng lặp chạy ClientScreen.run() - sẽ chặn luồng này
 def screen_streamer_loop(handler):

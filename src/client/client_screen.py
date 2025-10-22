@@ -28,7 +28,7 @@ class ClientScreen:
         # Vòng lặp ngoài: Xử lý kết nối lại khi mất kết nối
         while True:
             try:
-                with socket.create_connection((self.server_host, self.screen_port)) as s:
+                with socket.create_connection((self.server_host, self.screen_port), timeout=10) as s:
                     s.sendall(b"CLNT:") # Gửi mã định danh Client (handshake) lên Server
                     print("[CLIENT SCREEN] Connected to server for screen. Starting stream.")
                     
