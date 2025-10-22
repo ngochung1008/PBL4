@@ -1,4 +1,6 @@
 import sys
+import socket
+import json
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QMessageBox, QLabel, QPushButton, QSizePolicy
@@ -45,7 +47,7 @@ class SignInWindow(QWidget):
         self.pass_input = create_input("Enter your password", password=True)
 
         signup_btn = create_primary_button("Sign In")
-        signup_btn.clicked.connect(self.sign_up)
+        signup_btn.clicked.connect(self.sign_in)
 
         footer = QLabel("You don't have account?")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -108,8 +110,7 @@ class SignInWindow(QWidget):
         root_layout.addSpacing(40)                     
         root_layout.addWidget(right_img, stretch=2)     
 
-
-    def sign_up(self):
+    def sign_in(self):
         username = self.user_input.text().strip()
         password = self.pass_input.text().strip()
         
@@ -123,7 +124,11 @@ class SignInWindow(QWidget):
         QMessageBox.information(None, "Success", f"Account created for {username}!")
         self.token = token 
         from src.gui.profile import ProfileWindow
-        self.profile_window = ProfileWindow(client_profile(token))
+        from src.model.Users import User
+        data = client_profile(token)
+        print(".. ", data)
+        user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+        self.profile_window = ProfileWindow(user, token)
         self.profile_window.showMaximized()
         self.close()
 

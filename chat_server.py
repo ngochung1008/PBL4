@@ -1,61 +1,103 @@
-#!/usr/bin/env python3
 import socket
 import threading
-import sys
-import argparse
+import mysql.connector
+import json
+import uuid
+from datetime import datetime
 
-def recv_messages(conn, addr):
+def get_db_connection():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="085213",     
+        database="pbl4"      
+    )
+
+def login_user(username, password, client_ip):
     try:
-        with conn:
-            while True:
-                data = conn.recv(4096)
-                if not data:
-                    print("[INFO] Người kia đã thoát.")
-                    break
-                print(f"\r{addr[0]}: {data.decode('utf-8', errors='replace').rstrip()}\n> ", end="")
-    except Exception as e:
-        print(f"\n[ERROR] Lỗi nhận: {e}")
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
 
-def send_messages(conn):
+        cursor.execute("SELECT * FROM users WHERE Username = %s", (username,))
+        user = cursor.fetchone()
+
+        if not user:
+            return {"status": "error", "error": "Tài khoản không tồn tại."}
+
+        if password != user["PasswordHash"]:
+            return {"status": "error", "error": "Sai mật khẩu."}
+
+        session_id = str(uuid.uuid4())
+        cursor.execute("""
+            INSERT INTO session (SessionID, UserID, Ip, StartTime)
+            VALUES (%s, %s, %s, %s)
+        """, (session_id, user["UserID"], client_ip, datetime.now()))
+
+        cursor.execute("UPDATE users SET LastLogin = NOW() WHERE UserID = %s", (user["UserID"],))
+        db.commit()
+
+        def safe_datetime(value):
+            if isinstance(value, datetime):
+                return value.strftime("%Y-%m-%d %H:%M:%S")
+            return value or ""
+
+        return {
+            "status": "ok",
+            "token": session_id,
+            "user": {
+                "UserID": user["UserID"],
+                "Username": user["Username"],
+                "FullName": user.get("FullName", ""),
+                "Email": user.get("Email", ""),
+                "CreatedAt": safe_datetime(user.get("CreatedAt")),
+                "LastLogin": safe_datetime(user.get("LastLogin")),
+                "Role": user["Role"],
+            }
+    }
+
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+    finally:
+        db.close()
+
+def handle_client(conn, addr):
+    client_ip = addr[0]
+    print(f"Client connected from {client_ip}")
+
     try:
         while True:
-            msg = input("> ")
-            if msg.strip().lower() == "/quit":
-                try:
-                    conn.shutdown(socket.SHUT_RDWR)
-                except Exception:
-                    pass
-                conn.close()
-                print("[INFO] Đã thoát.")
+            data = conn.recv(4096)
+            if not data:
                 break
-            conn.sendall((msg + "\n").encode("utf-8"))
-    except (EOFError, KeyboardInterrupt):
-        try:
-            conn.shutdown(socket.SHUT_RDWR)
-        except Exception:
-            pass
+
+            msg = json.loads(data.decode("utf-8"))
+            action = msg.get("action")
+
+            if action == "login":
+                username = msg.get("username")
+                password = msg.get("password")
+                result = login_user(username, password, client_ip)
+                conn.sendall(json.dumps(result).encode("utf-8"))
+            else:
+                conn.sendall(json.dumps({"status": "error", "error": "Unknown action"}).encode("utf-8"))
+
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
         conn.close()
-        print("\n[INFO] Đã thoát.")
+        print(f"🔌 Client disconnected: {client_ip}")
 
-def main():
-    parser = argparse.ArgumentParser(description="Simple LAN Chat - Server")
-    parser.add_argument("--host", default="0.0.0.0", help="Địa chỉ lắng nghe (mặc định 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=5000, help="Cổng TCP (mặc định 5000)")
-    args = parser.parse_args()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((args.host, args.port))
-        s.listen(1)
-        print(f"[SERVER] Đang lắng nghe tại {args.host}:{args.port} ...")
-        print("[HƯỚNG DẪN] Khi kết nối xong, gõ tin nhắn và Enter để gửi. Gõ /quit để thoát.")
+def start_server():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("0.0.0.0", 5000))
+    s.listen(5)
+    print("Chat server running at 0.0.0.0:5000")
+
+    while True:
         conn, addr = s.accept()
-        print(f"[SERVER] Đã kết nối từ {addr[0]}:{addr[1]}")
-
-        t_recv = threading.Thread(target=recv_messages, args=(conn, addr), daemon=True)
-        t_recv.start()
-
-        send_messages(conn)
+        threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
 
 if __name__ == "__main__":
-    main()
+    start_server()

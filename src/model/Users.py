@@ -1,5 +1,4 @@
 from datetime import datetime
-import mysql.connector
 
 class User:
     def __init__(self, UserID, Username, PasswordHash, FullName, Email, CreatedAt, LastLogin, Role):

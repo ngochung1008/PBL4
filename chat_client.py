@@ -1,7 +1,10 @@
+import socket
+import json
 import sys
-import threading
+
+
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
+
 from src.gui.signin import SignInWindow
 from src.server.auth import get_user_by_sessionid, sign_in
 from src.client.auth import client_profile, client_login
@@ -19,9 +22,9 @@ if __name__ == "__main__":
 
     # print(sign_in("admin", "admin12"))
     # print(get_user_by_sessionid("d3e6d5c2-ab5d-11f0-87af-005056c00001"))
-    # app = QApplication(sys.argv)
-    # win = SignInWindow()
-    # win.showMaximized()
-    # sys.exit(app.exec())
+    app = QApplication(sys.argv)
+    win = SignInWindow()
+    win.showMaximized()
+    sys.exit(app.exec())
     # client_login("admin", "admin")
-    client_profile("d3e6d5c2-ab5d-11f0-87af-005056c00001")
+    # client_profile("d3e6d5c2-ab5d-11f0-87af-005056c00001")

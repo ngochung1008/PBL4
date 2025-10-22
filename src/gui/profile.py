@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QLineEdit, QFormLayout, QFrame
+    QMessageBox, QPushButton, QFormLayout, QFrame
 )
 from PyQt6.QtCore import Qt
 
@@ -10,17 +10,25 @@ from src.gui.ui_components import (
     create_primary_button, create_back_button
 )
 
+LIGHT_TEXT = "#FFFFFF"
+
+
 class ProfileWindow(QWidget):
-    def __init__(self, user):
-        print("OKe")
+    def __init__(self, user, token ):
         super().__init__()
+        print("ProfileWindow initialized")
+
         self.setWindowTitle("Account Profile")
         self.resize(1000, 650)
-        self.setStyleSheet(f"background-color: {DARK_BG};")
-        self.is_editing = False
+        self.setStyleSheet(f"background-color: {DARK_BG}; color: {LIGHT_TEXT};")
+
+        # Lưu thông tin user và token
         self.user = user
+        self.token = token
+        self.is_editing = False
+
         self.init_ui()
-    
+
     def init_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(30, 20, 30, 20)
@@ -50,12 +58,20 @@ class ProfileWindow(QWidget):
             }
         """)
 
-        self.username = create_input(self.user.Username)
-        self.full_name = create_input(self.user.FullName)
-        self.email = create_input(self.user.Email)
-        self.created_at = create_input(self.user.CreatedAt)
-        self.last_login = create_input(self.user.LastLogin)
-        self.role = create_input(self.user.Role)
+        # Nếu self.user là dict thì lấy key, nếu không thì dùng chuỗi
+        username = self.user.Username
+        fullname = self.user.FullName
+        email = self.user.Email
+        created_at = self.user.CreatedAt
+        last_login = self.user.LastLogin
+        role = self.user.Role
+
+        self.username = create_input(username)
+        self.full_name = create_input(fullname)
+        self.email = create_input(email)
+        self.created_at = create_input(created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "")
+        self.last_login = create_input(last_login.strftime("%Y-%m-%d %H:%M:%S") if last_login else "")
+        self.role = create_input(role)
 
         pass_form = QFormLayout()
         pass_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
@@ -104,6 +120,10 @@ class ProfileWindow(QWidget):
         self.btn_change.setFixedWidth(150)
         self.btn_change.clicked.connect(self.toggle_edit)
 
+        token_label = QLabel(f"Access Token: {self.token}")
+        token_label.setStyleSheet("color:#B3B3B3; font-size:10pt; margin-top:8px;")
+        token_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+
         action_row = QHBoxLayout()
         action_row.addWidget(self.forgot_lbl)
         action_row.addStretch()
@@ -114,53 +134,28 @@ class ProfileWindow(QWidget):
         card_layout.addWidget(pass_widget)
         card_layout.addSpacing(10)
         card_layout.addLayout(action_row)
-
+        card_layout.addWidget(token_label)  
 
         main_layout.addStretch()
         main_layout.addWidget(card, alignment=Qt.AlignmentFlag.AlignCenter)
         main_layout.addStretch()
 
-    def go_back(self):
-        QMessageBox.information(self, "Back", "Quay lại màn hình trước.")
-
     def toggle_edit(self):
-        """Chuyển đổi giữa chế độ xem và chỉnh sửa"""
-        if not self.is_editing:
-            self.is_editing = True
-            self.btn_change.setText("Save Change")
-            for w in [self.username, self.full_name, self.email, self.role,
-                      self.old_pass, self.new_pass]:
-                w.setReadOnly(False)
-        else:
-            self.save_changes()
+        self.is_editing = not self.is_editing
+        editable = not self.username.isReadOnly()
 
-    def save_changes(self):
-        """Lưu thay đổi & khoá form"""
-        if self.old_pass.text().strip() or self.new_pass.text().strip():
-            if not self.old_pass.text().strip() or not self.new_pass.text().strip():
-                QMessageBox.warning(self, "Error",
-                                    "Please fill in both old and new password.")
-                return
-            QMessageBox.information(self, "Password Changed",
-                                    "Password updated successfully.")
+        self.full_name.setReadOnly(editable)
+        self.email.setReadOnly(editable)
 
-        QMessageBox.information(self, "Saved", "Profile saved!")
-        self.is_editing = False
-        self.btn_change.setText("Change")
+        self.btn_change.setText("Cancel" if self.is_editing else "Change")
 
-        for w in [
-            self.username, self.full_name, self.email,
-            self.created_at, self.last_login, self.role,
-            self.old_pass, self.new_pass,
-        ]:
-            w.setReadOnly(True)
-
-        self.old_pass.clear()
-        self.new_pass.clear()
+    def go_back(self):
+        self.close()
 
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = ProfileWindow()
-    win.show()
-    sys.exit(app.exec())
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+#     dummy_user = {"Username": "test_user", "FullName": "Test User", "Email": "test@example.com"}
+#     win = ProfileWindow(dummy_user, token="ABC123TOKEN")
+#     win.show()
+#     sys.exit(app.exec())

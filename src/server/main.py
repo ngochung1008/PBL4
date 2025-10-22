@@ -3,10 +3,25 @@ import threading
 import struct
 import auth
 import subprocess
+import json
+from datetime import datetime
 
 HOST = "0.0.0.0"
 PORT = 5000
 
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+def send_json(conn, msg_type, data):
+    json_data = json.dumps(data, cls=DateTimeEncoder).encode("utf-8")
+    # json_data = json.dumps(data).encode("utf-8")
+    length = struct.pack("!I", len(json_data))
+    header = struct.pack("!B", msg_type)
+    conn.sendall(header + length + json_data)
+        
 def send_message(conn, msg_type, *fields):
     parts = []
     header = struct.pack("!B", msg_type)
@@ -69,11 +84,12 @@ def handle_login(conn, addr):
         print(f"[TOKEN] {token}")
         send_message(conn, 1, token)
 
-def handle_profile(conn, addr):
+def handle_profile(conn):
     token = read_field(conn).decode("utf-8")
     user = auth.get_user_by_sessionid(token)
-    # print(user.FullName)
-    send_message(conn, 1, user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7])
+    print("[PROFILE] User:", user)
+
+    send_json(conn, 1, user)
     
 def handle_file(conn):
     filename = read_field(conn).decode("utf-8")
@@ -104,7 +120,7 @@ def client_thread(conn, addr):
                 handle_login(conn, addr)
             elif msg_type == 2:
                 print("ok")
-                reply = handle_profile(conn, addr)
+                handle_profile(conn)
             else:
                 print("NO")
                 reply = b"Unknown type"

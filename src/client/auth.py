@@ -2,6 +2,8 @@ import socket
 import struct
 from config import server_config
 from src.model.Users import User
+import json
+from datetime import datetime
 
 HOST = server_config.SERVER_IP   # IP của server (chạy local thì giữ nguyên)
 PORT = server_config.SERVER_HOST  # port server lắng nghe
@@ -59,6 +61,24 @@ def client_login(username, password):
             print("[<] Dang nhap that bai")
             return None
 
+def try_parse_datetime(value):
+    """Thử parse chuỗi ISO thành datetime, nếu không được thì trả lại nguyên"""
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    return value
+
+def convert_datetimes(obj):
+    """Đệ quy chuyển tất cả chuỗi ISO trong dict/list về datetime"""
+    if isinstance(obj, dict):
+        return {k: convert_datetimes(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetimes(v) for v in obj]
+    else:
+        return try_parse_datetime(obj)
+
 def client_profile(token):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
@@ -72,16 +92,24 @@ def client_profile(token):
         print("Nhan duoc user")
         
         if (reply == 1):
-            userid = read_field(s).decode("utf-8")
-            username = read_field(s).decode("utf-8")
-            password = read_field(s).decode("utf-8")
-            fullname = read_field(s).decode("utf-8")
-            email = read_field(s).decode("utf-8")
-            createat = read_field(s).decode("utf-8")
-            lastlogin = read_field(s).decode("utf-8")
-            role = read_field(s).decode("utf-8")
+            length_data = s.recv(4)
+            if not length_data:
+                return None, None
+            length = struct.unpack("!I", length_data)[0]
 
-            return User(userid, username, password, fullname, email, createat, createat, role)
+            # Bước 3: đọc phần nội dung JSON
+            json_data = b""
+            while len(json_data) < length:
+                chunk = s.recv(length - len(json_data))
+                if not chunk:
+                    break
+                json_data += chunk
+
+            # Bước 4: giải mã JSON
+            data = json.loads(json_data.decode("utf-8"))
+            data = convert_datetimes(data)
+            print(data)
+            return data
         else:
             print("[<] Dang nhap that bai")
             return None

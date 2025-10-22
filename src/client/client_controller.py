@@ -64,11 +64,12 @@ class ClientController:
     def _send_cursor_updates(self, sock):
         try:
             while True:
-                time.sleep(0.05) # Giảm sleep để kiểm tra nhanh hơn
+                # time.sleep(0.05) # Giảm sleep để kiểm tra nhanh hơn
+                # Logic ngưỡng vị trí sẽ điều tiết tốc độ gửi (chỉ gửi khi có di chuyển)
 
                 # 1. Kiểm tra cờ chống vòng lặp
                 if time.time() < getattr(self, "_suppress_until", 0):
-                    time.sleep(0.05)
+                    time.sleep(0.01)
                     continue
 
                 # 2. Lấy vị trí con trỏ chuột hiện tại (cục bộ)
