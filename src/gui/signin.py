@@ -1,4 +1,6 @@
 import sys
+import socket
+import json
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QMessageBox, QLabel, QPushButton, QSizePolicy
@@ -45,7 +47,7 @@ class SignInWindow(QWidget):
         self.pass_input = create_input("Enter your password", password=True)
 
         signup_btn = create_primary_button("Sign In")
-        signup_btn.clicked.connect(self.sign_up)
+        signup_btn.clicked.connect(self.sign_in)
 
         footer = QLabel("You don't have account?")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -108,31 +110,39 @@ class SignInWindow(QWidget):
         root_layout.addSpacing(40)                     
         root_layout.addWidget(right_img, stretch=2)     
 
+    def sign_in(self):
+        user = self.user_input.text().strip()
+        pwd = self.pass_input.text().strip()
+        if not user or not pwd:
+            QMessageBox.warning(self, "Lỗi", "Vui lòng nhập đầy đủ thông tin.")
+            return
 
-    def sign_up(self):
-        username = self.user_input.text().strip()
-        password = self.pass_input.text().strip()
-        
-        if not username or not password:
-            QMessageBox.warning(self, "Error", "Please fill in all fields!")
-            return
-        token = client_login(username, password) 
-        if not token:
-            QMessageBox.critical(None, "Error", "Sign in failed! Check your credentials.")
-            return
-        QMessageBox.information(None, "Success", f"Account created for {username}!")
-        self.token = token 
-        def load_user():
-            from src.model.Users import get_user_by_sessionid
-            user = get_user_by_sessionid(self.token)
-            print(user)
-            if user:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect(("192.168.42.1", 5000)) 
+            s.sendall(json.dumps({"action": "login", "username": user, "password": pwd}).encode("utf-8"))
+            data = s.recv(4096)
+            s.close()
+
+            response = json.loads(data.decode("utf-8"))
+            if response.get("status") == "ok":
+                token = response.get("token")
+                user_data = response.get("user") 
+
+                if not user_data:
+                    QMessageBox.warning(self, "Lỗi", "Không nhận được thông tin người dùng từ server.")
+                    return
+
+                QMessageBox.information(self, "Thành công", f"Đăng nhập thành công!\nXin chào {user_data['FullName']}")
+
                 from src.gui.profile import ProfileWindow
-                self.profile_window = ProfileWindow(user)
+                self.profile_window = ProfileWindow(user_data, token)
                 self.profile_window.showMaximized()
                 self.close()
-
-        threading.Thread(target=load_user).start()
+            else:
+                QMessageBox.critical(self, "Lỗi", response.get("error", "Đăng nhập thất bại."))
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Không thể kết nối tới server: {e}")
 
 
     def dong(self):
