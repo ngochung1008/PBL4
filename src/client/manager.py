@@ -12,10 +12,11 @@ from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
 # Ghi chú: Thư viện socket đã được sử dụng đúng cách
 # Ghi chú: Sử dụng QThread để xử lý event loop của UI (app.exec())
+import config
 
-SERVER_HOST = "10.10.26.93"
-CONTROL_PORT = 9010   # gửi input tới server và nhận event từ server
-SCREEN_PORT = 5000    # nhận màn hình từ server
+SERVER_HOST = config.SERVER_HOST
+CONTROL_PORT = config.CONTROL_PORT
+SCREEN_PORT = config.SCREEN_PORT
 
 # Hàm này xử lý các gói JSON (chủ yếu là cursor_update) được Server forward từ Client.
 def start_recv_loop(sock, viewer):
