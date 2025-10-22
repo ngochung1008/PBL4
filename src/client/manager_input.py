@@ -3,10 +3,14 @@
 from pynput import mouse, keyboard
 import json
 import threading
+from client.config import THRESHOLD_DIST
+import config
 
 """ Lớp quản lý input của Manager (chuột + bàn phím) 
 Gửi sự kiện dưới dạng JSON qua socket kết nối với Server"""
 class ManagerInput:
+    THRESHOLD_DIST = config.THRESHOLD_DIST # ngưỡng khoảng cách (pixel) để gửi lệnh di chuyển chuột
+
     def __init__(self, conn, viewer=None):
         self.conn = conn # socket kết nối tới Server
         """viewer: ManagerViewer: cho phép gọi hàm viewer.get_current_mapped_remote() để chuyển tọa độ chuột cục bộ thành tọa độ remote."""
@@ -16,6 +20,9 @@ class ManagerInput:
         cờ này được đặt thành True để ngăn ManagerInput gửi sự kiện di chuyển tự động đó ngược lại cho Client."""
         self._ignore = False  
         self.is_controlling = False  # Theo dõi trạng thái chuột đang nằm trong vùng hiển thị remote
+        # Vị trí remote cuối cùng đã gửi (để giảm tần suất gửi)
+        self.last_remote_x = -1
+        self.last_remote_y = -1
 
     def set_ignore(self, duration: float):
         """Tạm thời bỏ gửi local events trong duration giây."""
@@ -68,6 +75,17 @@ class ManagerInput:
         
         # 2. Gửi tọa độ (đã ánh xạ từ chuột Manager) đến Client
         scaled_x, scaled_y = mapped
+        
+        thresholdDist = THRESHOLD_DIST
+
+        if (abs(scaled_x - self.last_remote_x) < thresholdDist and 
+            abs(scaled_y - self.last_remote_y) < thresholdDist):
+            return # Vị trí thay đổi quá ít, bỏ qua gửi lệnh
+            
+        self.last_remote_x = scaled_x # Cập nhật vị trí cuối cùng
+        self.last_remote_y = scaled_y
+        
+        # Gửi sự kiện move chỉ khi vượt ngưỡng
         self.send_event({
             "device": "mouse", 
             "type": "move",

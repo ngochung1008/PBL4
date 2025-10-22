@@ -18,6 +18,9 @@ class ClientController:
         self.keyboard = KeyboardController() # Đối tượng điều khiển bàn phím cục bộ
         self._running = True
         self._suppress_until = 0.0 # Cờ chống vòng lặp phản hồi (cursor_update)
+        # Vị trí client cuối cùng đã gửi
+        self.last_client_x = -1
+        self.last_client_y = -1
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -61,6 +64,8 @@ class ClientController:
     def _send_cursor_updates(self, sock):
         try:
             while True:
+                time.sleep(0.05) # Giảm sleep để kiểm tra nhanh hơn
+
                 # 1. Kiểm tra cờ chống vòng lặp
                 if time.time() < getattr(self, "_suppress_until", 0):
                     time.sleep(0.05)
@@ -68,6 +73,17 @@ class ClientController:
 
                 # 2. Lấy vị trí con trỏ chuột hiện tại (cục bộ)
                 x, y = self.mouse.position
+
+                # Đặt ngưỡng THRESHOLD_DIST_C = 3 pixel.
+                THRESHOLD_DIST_C = 3
+                
+                if (abs(x - self.last_client_x) < THRESHOLD_DIST_C and 
+                    abs(y - self.last_client_y) < THRESHOLD_DIST_C):
+                    # Nếu vị trí không thay đổi đáng kể, bỏ qua gửi.
+                    continue 
+
+                self.last_client_x = x 
+                self.last_client_y = y
 
                 # 3. Đóng gói JSON
                 msg = json.dumps({
@@ -83,7 +99,7 @@ class ClientController:
                 except Exception:
                     # socket có thể đã đóng
                     break
-                time.sleep(0.2) # Chờ 200ms trước khi cập nhật tiếp theo
+                # time.sleep(0.2) # Chờ 200ms trước khi cập nhật tiếp theo
         except Exception:
             pass
 

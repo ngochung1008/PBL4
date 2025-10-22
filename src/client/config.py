@@ -14,6 +14,7 @@ QUALITY = 70                # Chất lượng nén JPEG (1-100)
 # --- Anti-Feedback Loop (Latency) Settings ---
 # Thời gian Manager bỏ qua input cục bộ sau khi nhận lệnh di chuyển từ Client (ManagerViewer.show_remote_cursor)
 MANAGER_IGNORE_DURATION_S = 0.4 
+THRESHOLD_DIST = 5 # ngưỡng khoảng cách (pixel) để gửi lệnh di chuyển chuột
 
 # Thời gian Client tạm dừng gửi cursor_update sau khi nhận lệnh di chuyển từ Manager (ClientController.handle_mouse)
 CLIENT_SUPPRESS_DURATION_S = 0.4
