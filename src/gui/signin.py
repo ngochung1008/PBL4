@@ -11,7 +11,7 @@ from src.gui.ui_components import (
     create_primary_button, create_back_button
 )
 
-from src.client.auth import client_login
+from src.client.auth import client_login, client_profile
 import threading
 
 class SignInWindow(QWidget):
@@ -122,18 +122,10 @@ class SignInWindow(QWidget):
             return
         QMessageBox.information(None, "Success", f"Account created for {username}!")
         self.token = token 
-        def load_user():
-            from src.model.Users import get_user_by_sessionid
-            user = get_user_by_sessionid(self.token)
-            print(user)
-            if user:
-                from src.gui.profile import ProfileWindow
-                self.profile_window = ProfileWindow(user)
-                self.profile_window.showMaximized()
-                self.close()
-
-        threading.Thread(target=load_user).start()
-
+        from src.gui.profile import ProfileWindow
+        self.profile_window = ProfileWindow(client_profile(token))
+        self.profile_window.showMaximized()
+        self.close()
 
     def dong(self):
         self.close()    

@@ -69,6 +69,12 @@ def handle_login(conn, addr):
         print(f"[TOKEN] {token}")
         send_message(conn, 1, token)
 
+def handle_profile(conn, addr):
+    token = read_field(conn).decode("utf-8")
+    user = auth.get_user_by_sessionid(token)
+    # print(user.FullName)
+    send_message(conn, 1, user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7])
+    
 def handle_file(conn):
     filename = read_field(conn).decode("utf-8")
     (file_len,) = struct.unpack("!I", recv_exact(conn, 4))  # độ dài file
@@ -90,14 +96,17 @@ def client_thread(conn, addr):
             header = conn.recv(1)  # chỉ 1 byte: msg_type
             if not header:
                 break
+            print(header)
             msg_type = struct.unpack("!B", header)[0]
-
+            print(msg_type)
             if msg_type == 1:
                 print(f"[{addr}] Login request")
                 handle_login(conn, addr)
             elif msg_type == 2:
-                reply = handle_file(conn)
+                print("ok")
+                reply = handle_profile(conn, addr)
             else:
+                print("NO")
                 reply = b"Unknown type"
 
             # conn.sendall(reply)
@@ -118,5 +127,5 @@ def start_server():
         threading.Thread(target=client_thread, args=(conn, addr), daemon=True).start()
 
 if __name__ == "__main__":
-    print(auth.get_user_by_sessionid("d3e6d5c2-ab5d-11f0-87af-005056c00001"))
+    # print(auth.get_user_by_sessionid("d3e6d5c2-ab5d-11f0-87af-005056c00001"))
     start_server()

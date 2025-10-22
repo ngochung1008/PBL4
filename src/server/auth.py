@@ -2,6 +2,7 @@ import mysql.connector
 import getpass
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+# from ..model.Users import User
 
 ph = PasswordHasher(
     time_cost=2,     
@@ -137,6 +138,61 @@ def get_user_by_sessionid(sesion_id):
             cursor1.close()
             conn.close()
 
+def get_user_by_id(user_id):
+    try:
+        conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="root",
+            database="pbl4"
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM Users WHERE UserID = %s", (user_id,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if row:
+            return row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
+        else:
+            return None
+
+    except Exception as e:
+        print("Database error:", e)
+        return None
+
+def get_user_by_sessionid(sesion_id):
+    print("Fetching user for SessionID:", sesion_id)
+    try:
+        print("Connecting to DB...")
+        conn = mysql.connector.connect(
+            host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
+            user="root",            # Tài khoản MySQL
+            password="root",# Mật khẩu MySQL
+            database="pbl4"       # Tên database muốn dùng
+        )
+        print("✅ Connected to DB")
+
+        query = "SELECT UserID FROM Session WHERE SessionID = %s"
+        cursor1 = conn.cursor()
+        cursor1.execute(query, (sesion_id,))
+        result = cursor1.fetchone()
+        
+        if not result:
+            raise ValueError("User không tồn tại")
+        
+        user_id = result[0]
+        print(user_id)
+        
+        return get_user_by_id(user_id)
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return None
+    finally:
+        if conn.is_connected():
+            cursor1.close()
+            conn.close()
         
 # print(sign_in("admin", "admin123"))
 # print(sign_up("admin", "admin123", "Administrator", "admin@gmail.com"))
