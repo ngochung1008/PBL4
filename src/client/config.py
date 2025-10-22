@@ -10,3 +10,10 @@ SCREEN_PORT = 5000          # Cổng giao tiếp stream màn hình Client -> Ser
 # --- Thiết lập Stream ---
 FPS = 15                    # Tốc độ khung hình/giây
 QUALITY = 70                # Chất lượng nén JPEG (1-100)
+
+# --- Anti-Feedback Loop (Latency) Settings ---
+# Thời gian Manager bỏ qua input cục bộ sau khi nhận lệnh di chuyển từ Client (ManagerViewer.show_remote_cursor)
+MANAGER_IGNORE_DURATION_S = 0.4 
+
+# Thời gian Client tạm dừng gửi cursor_update sau khi nhận lệnh di chuyển từ Manager (ClientController.handle_mouse)
+CLIENT_SUPPRESS_DURATION_S = 0.4

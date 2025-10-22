@@ -5,6 +5,9 @@ from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt6.QtGui import QPixmap, QImage, QCursor, QGuiApplication
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QPoint
 import socket, struct, io, time
+import config
+
+MANAGER_IGNORE_DURATION_S = config.MANAGER_IGNORE_DURATION_S 
 
 class CustomLabel(QLabel):
     # Sử dụng tín hiệu tùy chỉnh để thông báo cho ManagerViewer
@@ -287,7 +290,7 @@ class ManagerViewer(QWidget):
             try:
                 if self.input_handler:
                     # ... Sử dụng self.input_handler.set_ignore(0.2) để tránh loop feedback ...
-                    self.input_handler.set_ignore(0.2)
+                    self.input_handler.set_ignore(MANAGER_IGNORE_DURATION_S)
                 global_pos = self.label.mapToGlobal(QPoint(lx, ly))
                 QCursor.setPos(global_pos) # Di chuyển con trỏ chuột hệ thống.
             except Exception as e:

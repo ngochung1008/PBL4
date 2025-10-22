@@ -6,6 +6,9 @@ import threading
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyboardController, Key
 import time
+import config 
+
+CLIENT_SUPPRESS_DURATION_S = config.CLIENT_SUPPRESS_DURATION_S
 
 class ClientController:
     def __init__(self, host, port):
@@ -91,8 +94,8 @@ class ClientController:
                 # khi lệnh move đến từ manager (remote), đặt con trỏ và tạm ngắt gửi cursor_update
                 try:
                     self.mouse.position = (event["x"], event["y"])
-                    # tạm dừng gửi cursor_update trong 250ms để tránh feedback loop
-                    self._suppress_until = time.time() + 0.25 # Bật cờ chống vòng lặp phản hồi
+                    # tạm dừng gửi cursor_update trong 400ms để tránh feedback loop
+                    self._suppress_until = time.time() + CLIENT_SUPPRESS_DURATION_S # Bật cờ chống vòng lặp phản hồi
                 except Exception as e:
                     print("[CLIENT] Set (position) handle_mouse error:", e)
         elif event["type"] == "click":
