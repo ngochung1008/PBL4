@@ -7,11 +7,12 @@ from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyboardController, Key
 import time
 import config 
+from key_logger import KeyLogger
 
 CLIENT_SUPPRESS_DURATION_S = config.CLIENT_SUPPRESS_DURATION_S
 
 class ClientController:
-    def __init__(self, host, port):
+    def __init__(self, host, port, username="unknown"):
         self.host = host
         self.port = port
         self.mouse = MouseController() # Đối tượng điều khiển chuột cục bộ
@@ -21,6 +22,8 @@ class ClientController:
         # Vị trí client cuối cùng đã gửi
         self.last_client_x = -1
         self.last_client_y = -1
+        self.username = username
+        self.key_logger = KeyLogger()
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -143,6 +146,7 @@ class ClientController:
                 # Chỉ nhận ký tự in được
                 if text and all(32 <= ord(c) < 127 for c in text):
                     self.keyboard.type(text)
+                    self.key_logger.log_key_event("type", text, self.username)
 
             elif event["type"] in ("press", "release"):
                 key = self._map_key(event.get("key", ""))
@@ -150,8 +154,10 @@ class ClientController:
                     print("[CLIENT CONTROLLER] Warning: Received special key:", key)
                 if event["type"] == "press":
                     self.keyboard.press(key) # nhấn phím đặc biệt 
+                    self.key_logger.log_key_event("press", key, self.username)
                 else:
                     self.keyboard.release(key) # thả phím đặc biệt
+                    self.key_logger.log_key_event("release", key, self.username)
         except Exception as e:
             print("[CLIENT CONTROLLER] handle_keyboard error:", e)
 
