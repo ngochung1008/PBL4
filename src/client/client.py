@@ -38,8 +38,10 @@ def controller_loop(controller):
         import os; os._exit(0) # Thoát hẳn chương trình Client
 
 if __name__ == "__main__":
+    username = "client1"
+
     # Khởi tạo luồng Input Controller (nhận lệnh từ SERVER -> CLIENT)
-    controller = ClientController(SERVER_HOST, CLIENT_PORT)
+    controller = ClientController(SERVER_HOST, CLIENT_PORT, username)
     threading.Thread(target=controller_loop, args=(controller,), daemon=True).start()
 
     # Khởi tạo luồng Screen Streamer (gửi frame từ CLIENT -> SERVER)
