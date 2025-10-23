@@ -38,7 +38,6 @@ def sign_in(username, password):
             cursor1.close()
             conn.close()
         
-
 def sign_up(username, password, fullname, email):
     conn = mysql.connector.connect(
         host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
@@ -94,9 +93,52 @@ def create_session(user_name, ip, mac_ip):
             LIMIT 1
         """, (user_id,))
         session_id = cursor.fetchone()[0]
-
+        
         return session_id
 
+    except Exception as e:
+        print("Lỗi:", e)
+        return None
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def log_out(session_id):
+    try:
+        conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="root",
+            database="pbl4"
+        )
+        cursor = conn.cursor()
+
+        query = "SELECT UserID FROM Session WHERE SessionID = %s"
+        cursor1 = conn.cursor()
+        cursor1.execute(query, (session_id,))
+        result = cursor1.fetchone()
+        
+        if not result:
+            raise ValueError("User không tồn tại")
+        
+        user_id = result[0]
+        print(user_id)
+
+        cursor.execute("""
+            UPDATE Users
+            SET LastLogin = CURRENT_TIMESTAMP
+            WHERE UserID = %s
+        """, (user_id,))
+        conn.commit()
+
+        cursor.execute("""
+            UPDATE Session
+            SET EndTime = CURRENT_TIMESTAMP
+            WHERE SessionID = %s
+        """, (session_id,))
+        conn.commit()
+        
     except Exception as e:
         print("Lỗi:", e)
         return None
@@ -193,6 +235,78 @@ def get_user_by_sessionid(sesion_id):
         if conn.is_connected():
             cursor1.close()
             conn.close()
+
+def check_pasword(userid, password):
+    try:
+        print("Connecting to DB...")
+        conn = mysql.connector.connect(
+            host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
+            user="root",            # Tài khoản MySQL
+            password="root",# Mật khẩu MySQL
+            database="pbl4"       # Tên database muốn dùng
+        )
+        print("✅ Connected to DB : ", password)
+
+        query = "SELECT PasswordHash FROM Users WHERE UserID = %s"
+        cursor1 = conn.cursor()
         
+        cursor1.execute(query, (userid, ))
+        result = cursor1.fetchone()
+        
+        if not result:
+            return False
+        
+        stored_hash = result[0]
+        try:
+            ph.verify(stored_hash, password)
+            return True
+        except VerifyMismatchError:
+            return False
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return False
+    finally:
+        if conn.is_connected():
+            cursor1.close()
+            conn.close()
+
+def edit_user(userid, fullname, email, new_password):
+    try:
+        print("Connecting to DB...")
+        conn = mysql.connector.connect(
+            host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
+            user="root",            # Tài khoản MySQL
+            password="root",# Mật khẩu MySQL
+            database="pbl4"       # Tên database muốn dùng
+        )
+        print("✅ Connected to DB")
+
+        cursor = conn.cursor()
+        if new_password == "":
+            cursor.execute("""
+                UPDATE Users
+                SET FullName = %s , Email = %s
+                WHERE UserID = %s
+            """, (fullname, email, userid, ))
+            conn.commit()
+        else:
+            cursor.execute("""
+                UPDATE Users
+                SET FullName = %s , Email = %s, PasswordHash = %s
+                WHERE UserID = %s
+            """, (fullname, email, ph.hash(new_password), userid, ))
+            conn.commit()
+        
+        return True
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return False
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+            
 # print(sign_in("admin", "admin123"))
 # print(sign_up("admin", "admin123", "Administrator", "admin@gmail.com"))

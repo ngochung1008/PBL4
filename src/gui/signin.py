@@ -64,7 +64,8 @@ class SignInWindow(QWidget):
             }
             QPushButton:hover { text-decoration: underline; }
         """)
-
+        sign_in_btn.clicked.connect(self.sign_up)
+        
         forgot_pass_btn = QPushButton("Forgot password?")
         forgot_pass_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         forgot_pass_btn.setStyleSheet("""
@@ -115,7 +116,7 @@ class SignInWindow(QWidget):
         password = self.pass_input.text().strip()
         
         if not username or not password:
-            QMessageBox.warning(self, "Error", "Please fill in all fields!")
+            QMessageBox.warning(None, "Error", "Please fill in all fields!")
             return
         token = client_login(username, password) 
         if not token:
@@ -123,6 +124,7 @@ class SignInWindow(QWidget):
             return
         QMessageBox.information(None, "Success", f"Account created for {username}!")
         self.token = token 
+        QApplication.instance().current_user = token
         from src.gui.profile import ProfileWindow
         from src.model.Users import User
         data = client_profile(token)
@@ -132,6 +134,12 @@ class SignInWindow(QWidget):
         self.profile_window.showMaximized()
         self.close()
 
+    def sign_up(self):
+        from src.gui.signup import SignUpWindow
+        self.signup_window = SignUpWindow()
+        self.signup_window.show()
+        self.close()
+        
     def dong(self):
         self.close()    
 

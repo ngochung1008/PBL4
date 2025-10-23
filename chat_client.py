@@ -6,9 +6,14 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from src.gui.signin import SignInWindow
-from src.server.auth import get_user_by_sessionid, sign_in
-from src.client.auth import client_profile, client_login
-import mysql.connector
+
+def on_app_exit():
+    print("⏳ Ứng dụng chuẩn bị thoát, cập nhật LastLogin...")
+    if QApplication.instance().current_user is None:
+        return
+    from src.client.auth import client_logout
+    client_logout(QApplication.instance().current_user)
+    print("✅ Đã cập nhật LastLogin.")
 
 if __name__ == "__main__":
     # print("Connecting to DB...")
@@ -23,8 +28,10 @@ if __name__ == "__main__":
     # print(sign_in("admin", "admin12"))
     # print(get_user_by_sessionid("d3e6d5c2-ab5d-11f0-87af-005056c00001"))
     app = QApplication(sys.argv)
+    app.current_user = None  # lưu thông tin user hiện tại
+    app.aboutToQuit.connect(on_app_exit)
     win = SignInWindow()
-    win.showMaximized()
+    win.show()
     sys.exit(app.exec())
     # client_login("admin", "admin")
     # client_profile("d3e6d5c2-ab5d-11f0-87af-005056c00001")

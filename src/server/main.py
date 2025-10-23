@@ -90,7 +90,50 @@ def handle_profile(conn):
     print("[PROFILE] User:", user)
 
     send_json(conn, 1, user)
-    
+
+def handle_logout(conn):
+    token = read_field(conn).decode("utf-8")
+    user = auth.log_out(token)
+
+    send_json(conn, 1, user)
+
+def handle_signup(conn):
+    username = read_field(conn).decode("utf-8")
+    password = read_field(conn).decode("utf-8")
+    fullname = read_field(conn).decode("utf-8")
+    email = read_field(conn).decode("utf-8")
+    print(f"[SIGNUP] {username}:{password}:{fullname}:{email}")
+    check = auth.sign_up(username, password, fullname, email)
+    print(f"[SIGNUP] {username} ket qua: {check}")
+    if  (check == False):
+        send_message(conn, 0)
+    else:
+        send_message(conn, 1)
+
+def client_checkpassword(conn):
+    userid = read_field(conn).decode("utf-8")
+    password = read_field(conn).decode("utf-8")
+    print(f"[CHECKPASSWORD] {userid}:{password}")
+    check = auth.check_pasword(userid, password)
+    print(f"[CHECKPASSWORD] {userid} ket qua: {check}")
+    if  (check == False):
+        send_message(conn, 0)
+    else:
+        send_message(conn, 1)
+
+def client_edit(conn):
+    userid = read_field(conn).decode("utf-8")
+    fullname = read_field(conn).decode("utf-8")
+    email = read_field(conn).decode("utf-8")
+    new_password = read_field(conn).decode("utf-8")
+    print(f"[EDIT] {userid}:{fullname}:{email}:{new_password}")
+    check = auth.edit_user(userid, fullname, email, new_password)
+    print(f"[EDIT] {userid} ket qua: {check}")
+    if  (check == False):
+        send_message(conn, 0)
+    else:
+        send_message(conn, 1)
+        
 def handle_file(conn):
     filename = read_field(conn).decode("utf-8")
     (file_len,) = struct.unpack("!I", recv_exact(conn, 4))  # độ dài file
@@ -121,6 +164,18 @@ def client_thread(conn, addr):
             elif msg_type == 2:
                 print("ok")
                 handle_profile(conn)
+            elif msg_type == 3:
+                print(f"[{addr}] Logout request")
+                handle_logout(conn)
+            elif msg_type == 4:
+                print(f"[{addr}] Signup request")
+                handle_signup(conn)
+            elif msg_type == 5:
+                print(f"[{addr}] Check password request")
+                client_checkpassword(conn)
+            elif msg_type == 6:
+                print(f"[{addr}] Edit user request")
+                client_edit(conn)
             else:
                 print("NO")
                 reply = b"Unknown type"

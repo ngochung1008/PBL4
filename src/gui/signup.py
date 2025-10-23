@@ -6,11 +6,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 
-from ui_components import (
+from src.gui.ui_components import (
     DARK_BG, create_card, create_title, create_input,
     create_primary_button, create_back_button
 )
-
+from src.client.auth import client_signup
 
 class SignUpWindow(QWidget):
     def __init__(self):
@@ -41,6 +41,12 @@ class SignUpWindow(QWidget):
         self.user_input = create_input("Enter your username")
         self.user_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
+        self.fullname_input = create_input("Enter your full name")
+        self.fullname_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.email_input = create_input("Enter your email")
+        self.email_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
         self.pass_input = create_input("Enter your password", password=True)
         self.pass_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
@@ -63,6 +69,7 @@ class SignUpWindow(QWidget):
             }
             QPushButton:hover { text-decoration: underline; }
         """)
+        sign_in_btn.clicked.connect(self.sign_in)
 
         footer_row = QHBoxLayout()
         footer_row.addStretch()
@@ -74,6 +81,8 @@ class SignUpWindow(QWidget):
         card_layout.addWidget(subtitle)
         card_layout.addSpacing(10)
         card_layout.addWidget(self.user_input)
+        card_layout.addWidget(self.fullname_input)
+        card_layout.addWidget(self.email_input)
         card_layout.addWidget(self.pass_input)
         card_layout.addWidget(signup_btn)
         card_layout.addLayout(footer_row)
@@ -99,15 +108,30 @@ class SignUpWindow(QWidget):
 
     def sign_up(self):
         username = self.user_input.text().strip()
+        fullname = self.fullname_input.text().strip()
+        email = self.email_input.text().strip()
         password = self.pass_input.text().strip()
-        if not username or not password:
-            QMessageBox.warning(self, "Error", "Please fill in all fields!")
+        if not username or not password or not fullname or not email:
+            QMessageBox.warning(None, "Error", "Please fill in all fields!")
             return
-        QMessageBox.information(self, "Success", f"Account created for {username}!")
+        success = client_signup(username, password, fullname, email)
+        if not success:
+            QMessageBox.critical(None, "Error", "Sign up failed! Username may already exist.")
+            return
+        QMessageBox.information(None, "Success", f"Account created for {username}!")
+        from src.gui.signin import SignInWindow
+        self.signin_window = SignInWindow()
+        self.signin_window.show()
+        self.close()
+    
+    def sign_in(self):
+        from src.gui.signin import SignInWindow
+        self.signin_window = SignInWindow()
+        self.signin_window.show()
+        self.close()
 
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = SignUpWindow()
-    win.showMaximized()   
-    sys.exit(app.exec())
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+#     win = SignUpWindow()
+#     win.showMaximized()   
+#     sys.exit(app.exec())

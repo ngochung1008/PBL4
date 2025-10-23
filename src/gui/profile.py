@@ -10,6 +10,8 @@ from src.gui.ui_components import (
     create_primary_button, create_back_button
 )
 
+from src.client.auth import client_checkpassword, client_edit, client_profile
+
 LIGHT_TEXT = "#FFFFFF"
 
 
@@ -73,6 +75,13 @@ class ProfileWindow(QWidget):
         self.last_login = create_input(last_login.strftime("%Y-%m-%d %H:%M:%S") if last_login else "")
         self.role = create_input(role)
 
+        self.username.setText(self.user.Username)
+        self.full_name.setText(self.user.FullName)
+        self.email.setText(self.user.Email)
+        self.created_at.setText(self.user.CreatedAt.strftime("%Y-%m-%d %H:%M:%S") if self.user.CreatedAt else "")
+        self.last_login.setText(self.user.LastLogin.strftime("%Y-%m-%d %H:%M:%S") if self.user.LastLogin else "")
+        self.role.setText(self.user.Role)
+
         pass_form = QFormLayout()
         pass_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         pass_form.setFormAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
@@ -92,9 +101,9 @@ class ProfileWindow(QWidget):
         self.new_pass = create_input("New Password", password=True)
 
         for w in [
-            self.username, self.full_name, self.email,
+            self.username, # self.full_name, self.email,
             self.created_at, self.last_login, self.role,
-            self.old_pass, self.new_pass,
+            # self.old_pass, self.new_pass,
         ]:
             w.setReadOnly(True)
 
@@ -141,16 +150,52 @@ class ProfileWindow(QWidget):
         main_layout.addStretch()
 
     def toggle_edit(self):
-        self.is_editing = not self.is_editing
-        editable = not self.username.isReadOnly()
+        passed_old = self.old_pass.text().strip()
+        passed_new = self.new_pass.text().strip()
+        fullname_new = self.full_name.text().strip() if self.full_name.text().strip() else self.user.FullName
+        email_new = self.email.text().strip() if self.email.text().strip() else self.user.Email
 
-        self.full_name.setReadOnly(editable)
-        self.email.setReadOnly(editable)
+        print("aaaaa", passed_old, passed_new, fullname_new, email_new)
+        editable = False if not passed_old else client_checkpassword(self.user.UserID, passed_old)
+        
+        if not editable:
+            QMessageBox.warning(None, "Error", "Password is incorrect!")
+            return
 
-        self.btn_change.setText("Cancel" if self.is_editing else "Change")
-
+        
+        if self.new_pass.text().strip():
+            if self.new_pass.text().strip() == self.old_pass.text().strip():
+                QMessageBox.warning(None, "Error", "New password must be different from old password!")
+                return
+            client_edit(self.user.UserID, fullname_new, email_new, passed_new)
+        else:
+            client_edit(self.user.UserID, fullname_new, email_new)
+        QMessageBox.information(None, "Success", "Profile updated successfully!")
+        self.refresh_user_data()
+        
     def go_back(self):
         self.close()
+
+    def refresh_user_data(self):
+        from src.model.Users import User
+        data = client_profile(self.token)
+        new_user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+        
+        self.user = new_user  # cập nhật lại dữ liệu user
+
+        # Cập nhật lại giao diện
+        self.username.setText(self.user.Username)
+        self.full_name.setText(self.user.FullName)
+        self.email.setText(self.user.Email)
+        self.created_at.setText(self.user.CreatedAt.strftime("%Y-%m-%d %H:%M:%S") if self.user.CreatedAt else "")
+        self.last_login.setText(self.user.LastLogin.strftime("%Y-%m-%d %H:%M:%S") if self.user.LastLogin else "")
+        self.role.setText(self.user.Role)
+
+        # Xóa mật khẩu cũ
+        self.old_pass.clear()
+        self.new_pass.clear()
+
+        print("🔄 Profile refreshed successfully!")
 
 
 # if __name__ == "__main__":

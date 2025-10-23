@@ -113,12 +113,68 @@ def client_profile(token):
         else:
             print("[<] Dang nhap that bai")
             return None
-        # user = input("Username: ")
-        # pw = input("Password: ")
 
-        # # if not reply:
-        # #     print("[!] Server Khong tra loi")
-        # #     return
+def client_logout(token):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        print(f"[+] Ket noi toi server {HOST}:{PORT}")
 
-        # print("[<] Phan hoi tu server:", reply)
+        send_message(s, 3, token)
+
+def client_signup(username, password, fullname, email):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        print(f"[+] Ket noi toi server {HOST}:{PORT}")
+
+        send_message(s, 4, username, password, fullname, email)
+
+        reply = s.recv(1)
+        reply = struct.unpack("!B", reply)[0]
+        
+        if (reply == 1):
+            return True
+        else:
+            print("[<] Dang ky that bai")
+            return False
+        
+def client_checkpassword(userid, password):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        print(f"[+] Ket noi toi server {HOST}:{PORT}")
+
+        send_message(s, 5, userid, password)
+
+        reply = s.recv(1)
+        reply = struct.unpack("!B", reply)[0]
+        
+        if (reply == 1):
+            return True
+        else:
+            print("[<] Kiem tra mat khau that bai")
+            return False
+
+def client_edit(userid, fullname, email, new_password=""):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        print(f"[+] Ket noi toi server {HOST}:{PORT}")
+
+        send_message(s, 6, userid, fullname, email, new_password)
+
+        reply = s.recv(1)
+        reply = struct.unpack("!B", reply)[0]
+        
+        if (reply == 1):
+            return True
+        else:
+            print("[<] Cap nhat mat khau that bai")
+            return False
+        
+# user = input("Username: ")
+# pw = input("Password: ")
+
+# # if not reply:
+# #     print("[!] Server Khong tra loi")
+# #     return
+
+# print("[<] Phan hoi tu server:", reply)
 
