@@ -6,6 +6,7 @@ SERVER_HOST = "192.168.9.77"  # Địa chỉ IP của server
 CONTROL_PORT = 9010         # Cổng giao tiếp lệnh Manager <-> Server
 CLIENT_PORT = 9011          # Cổng giao tiếp lệnh Server -> Client
 SCREEN_PORT = 5000          # Cổng giao tiếp stream màn hình Client -> Server
+TRANSFER_PORT = 5003            # Cổng chung cho Chat và File Transfer
 
 # --- Thiết lập Stream ---
 FPS = 15                    # Tốc độ khung hình/giây

@@ -10,6 +10,7 @@ from PyQt6.QtCore import QThread
 import time
 from manager_input import ManagerInput
 from manager_viewer import ManagerViewer
+from transfer_channel import TransferChannel
 # Ghi chú: Thư viện socket đã được sử dụng đúng cách
 # Ghi chú: Sử dụng QThread để xử lý event loop của UI (app.exec())
 import config
@@ -17,6 +18,7 @@ import config
 SERVER_HOST = config.SERVER_HOST
 CONTROL_PORT = config.CONTROL_PORT
 SCREEN_PORT = config.SCREEN_PORT
+TRANSFER_PORT = config.TRANSFER_PORT
 
 # Hàm này xử lý các gói JSON (chủ yếu là cursor_update) được Server forward từ Client.
 def start_recv_loop(sock, viewer):
@@ -75,6 +77,26 @@ if __name__ == "__main__":
 
     # Gắn input handler vào viewer để viewer có thể tạm vô hiệu hoá
     viewer.set_input_handler(input_handler)
+
+    # 1. Định nghĩa callback để xử lý gói nhận
+    def handle_transfer_package(pkg):
+        pkg_type = pkg.get("type")
+        sender = pkg.get("sender")
+        data = pkg.get("data")
+        
+        if pkg_type == "chat":
+            print(f"[CHAT] {sender}: {data}")
+            # Cập nhật UI chatbox
+        elif pkg_type == "file_meta":
+            # Bắt đầu chuẩn bị nhận file (tên file, kích thước)
+            print(f"[FILE] Nhận thông tin file từ {sender}: {data['filename']}")
+            # Kích hoạt luồng/lớp nhận file
+
+    # 2. Khởi tạo và kết nối TransferChannel
+    transfer_channel = TransferChannel(SERVER_HOST, TRANSFER_PORT, handle_transfer_package)
+    if not transfer_channel.connect():
+        print("[MANAGER] Could not connect to transfer server.")
+        # Xử lý lỗi nếu cần
 
     # Chờ frame đầu tiên để có thể map tọa độ (đảm bảo remote_width có giá trị)
     waited = 0.0
