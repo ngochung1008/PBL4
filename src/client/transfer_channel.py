@@ -1,11 +1,13 @@
 # transfer_channel.py
+
 import sys
 import socket
 import threading
 import json
 import struct
 import os 
-import base64 # Import cần thiết
+import base64
+import time 
 
 class TransferChannel:
     def __init__(self, server_host, transfer_port, on_receive_callback):
@@ -37,9 +39,7 @@ class TransferChannel:
                 
                 self.buffer += data
                 
-                # Logic phân tách gói tin
                 while len(self.buffer) >= 4:
-                    # Đảm bảo có đủ 4 bytes
                     if len(self.buffer) < 4: break 
                         
                     package_size = struct.unpack('!I', self.buffer[:4])[0]
@@ -49,14 +49,13 @@ class TransferChannel:
                         self.buffer = self.buffer[4 + package_size:]
                         
                         try:
-                            # Phân tích gói JSON và gọi callback
                             pkg = json.loads(package_data.decode('utf-8'))
                             self.on_receive(pkg)
                         except json.JSONDecodeError:
                             print("[TRANSFER] Received invalid package format.")
                         
                     else:
-                        break # Chưa nhận đủ gói
+                        break 
         except Exception as e:
             print(f"[TRANSFER] Receiver loop error: {e}")
             
@@ -74,10 +73,8 @@ class TransferChannel:
                 pass
             self.sock = None
 
-    # Hàm gửi dữ liệu (Chat hoặc File Meta/Data/End)
     def send_package(self, pkg_type, target_ip, data):
         if not self.is_connected:
-            print("[TRANSFER] Not connected to server.")
             return False
 
         pkg = {
@@ -87,17 +84,14 @@ class TransferChannel:
         }
         
         try:
-            # Đóng gói JSON
             pkg_str = json.dumps(pkg)
             pkg_bytes = pkg_str.encode('utf-8')
             pkg_size = len(pkg_bytes)
             
-            # Gửi: Kích thước gói (4 bytes) + Dữ liệu gói
             header = struct.pack('!I', pkg_size)
             self.sock.sendall(header + pkg_bytes)
             return True
         except Exception as e:
-            # print(f"[TRANSFER] Send error: {e}") # Bỏ in lỗi để tránh spam terminal
             self.is_connected = False
             self.close()
             return False
@@ -127,7 +121,7 @@ class TransferChannel:
         print(f"[TRANSFER] Sent metadata for {file_name} to {target_ip}. Starting CHUNK data transfer...")
         
         # 2. Gửi dữ liệu file theo CHUNKS
-        CHUNK_SIZE = 3072 # Kích thước chunk hợp lý 
+        CHUNK_SIZE = 3072
         bytes_sent = 0
         
         try:
@@ -136,13 +130,11 @@ class TransferChannel:
                     chunk = f.read(CHUNK_SIZE)
                     if not chunk: break
                         
-                    # Mã hóa Base64
                     base64_chunk = base64.b64encode(chunk).decode('utf-8')
                     
-                    # Gửi gói file_data
                     file_data_pkg = {
                         "chunk": base64_chunk,
-                        "bytes": len(chunk) # Kích thước data gốc
+                        "bytes": len(chunk)
                     }
                     if not self.send_package("file_data", target_ip, file_data_pkg):
                         raise Exception("Failed to send file data chunk.")
@@ -150,7 +142,8 @@ class TransferChannel:
                     bytes_sent += len(chunk)
                     sys.stdout.write(f"\r[TRANSFER] Progress: {bytes_sent/file_size*100:.1f}%")
                     sys.stdout.flush()
-
+                    time.sleep(0.001) 
+            
             # 3. Gửi gói kết thúc
             self.send_package("file_end", target_ip, {})
             print(f"\n[TRANSFER] Finished sending file data for {file_name}.")
