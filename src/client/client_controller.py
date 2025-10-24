@@ -3,16 +3,16 @@
 import socket
 import json
 import threading
+from datetime import datetime
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyboardController, Key
 import time
 import config 
-from key_logger import KeyLogger
 
 CLIENT_SUPPRESS_DURATION_S = config.CLIENT_SUPPRESS_DURATION_S
 
 class ClientController:
-    def __init__(self, host, port, username="unknown"):
+    def __init__(self, host, port, username="unknown", transfer_channel=None):
         self.host = host
         self.port = port
         self.mouse = MouseController() # Đối tượng điều khiển chuột cục bộ
@@ -23,7 +23,7 @@ class ClientController:
         self.last_client_x = -1
         self.last_client_y = -1
         self.username = username
-        self.key_logger = KeyLogger()
+        self.key_logger = transfer_channel
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -138,28 +138,43 @@ class ClientController:
 
     # ================= Keyboard =================
     def handle_keyboard(self, event):
+        if not self.transfer_channel: 
+            return
+        log_type = event["type"]
         try:
             """ Lệnh "type": Gõ các ký tự đơn giản.
                 Lệnh "press"/"release": Sử dụng _map_key để chuyển tên phím """
-            if event["type"] == "type": 
+            if log_type == "type":
                 text = event.get("text", "")
                 # Chỉ nhận ký tự in được
                 if text and all(32 <= ord(c) < 127 for c in text):
                     self.keyboard.type(text)
-                    self.key_logger.log_key_event("type", text, self.username)
+                    self._send_log_to_server("type", text)
 
-            elif event["type"] in ("press", "release"):
+            elif log_type in ("press", "release"):
                 key = self._map_key(event.get("key", ""))
+                key_str = str(key).replace("Key.", "")
                 if isinstance(key, Key) and key in [Key.ctrl, Key.alt, Key.cmd, Key.esc]:
                     print("[CLIENT CONTROLLER] Warning: Received special key:", key)
-                if event["type"] == "press":
-                    self.keyboard.press(key) # nhấn phím đặc biệt 
-                    self.key_logger.log_key_event("press", key, self.username)
+                if log_type == "press":
+                    self.keyboard.press(key) 
                 else:
-                    self.keyboard.release(key) # thả phím đặc biệt
-                    self.key_logger.log_key_event("release", key, self.username)
+                    self.keyboard.release(key)
+                self._send_log_to_server(log_type, key_str)
         except Exception as e:
             print("[CLIENT CONTROLLER] handle_keyboard error:", e)
+
+    # Gửi sự kiện log qua Transfer Channel
+    def _send_log_to_server(self, event_type, key_info):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_data = {
+            "timestamp": timestamp,
+            "user": self.username,
+            "event_type": event_type,
+            "key": key_info
+        }
+        # Gửi gói "keylog" tới Server. Server sẽ relay cho Manager.
+        self.transfer_channel.send_package("keylog", target_ip="all", data=log_data)
 
     def _map_key(self, key_str):
         """Chuyển tên phím từ JSON sang Key object hoặc ký tự thường"""

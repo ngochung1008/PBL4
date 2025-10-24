@@ -100,7 +100,7 @@ if __name__ == "__main__":
         # Xử lý lỗi nếu cần
 
     # IP của Client mà Manager muốn gửi file đến (ví dụ)
-    TARGET_CLIENT_IP = '10.10.49.57' # <--- THAY THẾ IP NÀY BẰNG IP CLIENT THỰC TẾ
+    TARGET_CLIENT_IP = '10.10.30.16' # <--- THAY THẾ IP NÀY BẰNG IP CLIENT THỰC TẾ
     FILE_TO_SEND = "test_file.txt" 
 
     # Tạo file dummy nếu chưa có

