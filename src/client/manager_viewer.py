@@ -64,6 +64,7 @@ class ScreenReceiver(QThread):
                     32-bit không dấu (I) theo thứ tự big-endian (>). Ba giá trị này là: 
                     chiều rộng (w), chiều cao (h), và độ dài của dữ liệu hình ảnh (length). """
                     w, h, length = struct.unpack(">III", header)
+                    print(f"[MANAGER VIEWER] Incoming frame header: {w}x{h}, {length} bytes")
                     data = self.recv_all(sock, length)
                     if not data:
                         break
@@ -157,6 +158,13 @@ class ManagerViewer(QWidget):
         QGuiApplication.setOverrideCursor(Qt.CursorShape.BlankCursor)
         # Hiển thị con trỏ mô phỏng (chấm đỏ) của client
         self.cursor_label.show() 
+        # Nếu có input handler, bật chế độ control (manager có thể điều khiển)
+        try:
+            if self.input_handler:
+                self.input_handler.is_controlling = True
+                print("[MANAGER VIEWER] Input control ENABLED")
+        except Exception as e:
+            print("[MANAGER VIEWER] set control ON error:", e)
         
     def handle_label_leave(self):
         """Khi con trỏ Manager rời khỏi vùng hiển thị ảnh."""
@@ -164,6 +172,12 @@ class ManagerViewer(QWidget):
         QGuiApplication.restoreOverrideCursor()
         # Ẩn con trỏ mô phỏng
         self.cursor_label.hide()
+        try:
+            if self.input_handler:
+                self.input_handler.is_controlling = False
+                print("[MANAGER VIEWER] Input control DISABLED")
+        except Exception as e:
+            print("[MANAGER VIEWER] set control OFF error:", e)
 
     """ # Hàm xử lý khi con trỏ chuột HỆ THỐNG đi vào QLabel
     def label_enterEvent(self, event):
@@ -286,7 +300,7 @@ class ManagerViewer(QWidget):
         # 2. Di chuyển con trỏ hệ thống (Tùy chọn)
         # Chỉ di chuyển con trỏ hệ thống khi rõ ràng muốn do hành động local,
         # tránh auto-move mỗi khi nhận cursor_update từ client.
-        if move_system_cursor:
+        if move_system_cursor and QGuiApplication.focusWindow():
             try:
                 if self.input_handler:
                     # ... Sử dụng self.input_handler.set_ignore(0.2) để tránh loop feedback ...

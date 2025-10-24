@@ -36,7 +36,7 @@ def start_recv_loop(sock, viewer):
                     if ev.get("device") == "mouse" and ev.get("type") == "cursor_update":
                         # Quyết định có cho phép Client điều khiển con trỏ Manager hay không
                         # Chỉ cho phép Client điều khiển nếu Manager KHÔNG đang điều khiển Client (chuột đang ở ngoài cửa sổ)
-                        move_allowed = not viewer.input_handler.is_controlling
+                        move_allowed = not (viewer.input_handler and viewer.input_handler.is_controlling)
                         # Hiển thị chấm đỏ và di chuyển con trỏ hệ thống (move_system_cursor=True)
                         viewer.show_remote_cursor(int(ev["x"]), int(ev["y"]), move_system_cursor=move_allowed)
                     # có thể xử lý thêm event khác nếu cần

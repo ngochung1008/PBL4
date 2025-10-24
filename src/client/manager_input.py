@@ -133,6 +133,8 @@ class ManagerInput:
     # ================== Keyboard ==================
     # Được gọi ngay khi một phím bất kỳ trên bàn phím được nhấn xuống.
     def on_press(self, key):
+        if self._ignore or not self.is_controlling:
+            return
         try:
             if hasattr(key, "char") and key.char is not None:
                 # Phím ký tự
@@ -153,6 +155,8 @@ class ManagerInput:
 
     # Được gọi ngay khi một phím bất kỳ trên bàn phím được nhả ra (thả lên).
     def on_release(self, key):
+        if self._ignore or not self.is_controlling:
+            return
         try:
             if hasattr(key, "char") and key.char is not None:
                 self.send_event({

@@ -128,13 +128,10 @@ class TransferChannel:
     def _send_file_data(self, file_path):
         """Gửi dữ liệu file thô qua socket hiện tại (Không dùng JSON/Header nữa)."""
         try:
+            self.sock.sendall(b"FILEDATA") 
             with open(file_path, 'rb') as f:
-                while True:
-                    bytes_read = f.read(4096)
-                    if not bytes_read:
-                        break
-                    # Gửi data thô
-                    self.sock.sendall(bytes_read)
+                while chunk := f.read(4096):
+                    self.sock.sendall(chunk)
             print(f"[TRANSFER] Finished sending file data for {os.path.basename(file_path)}.")
         except Exception as e:
             print(f"[TRANSFER] Error sending file data: {e}")

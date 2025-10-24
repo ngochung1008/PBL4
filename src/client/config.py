@@ -1,7 +1,7 @@
 # config.py
 
 # --- Thiết lập mạng ---
-SERVER_HOST = "192.168.9.77"  # Địa chỉ IP của server
+SERVER_HOST = "10.10.58.42"  # Địa chỉ IP của server
 
 CONTROL_PORT = 9010         # Cổng giao tiếp lệnh Manager <-> Server
 CLIENT_PORT = 9011          # Cổng giao tiếp lệnh Server -> Client

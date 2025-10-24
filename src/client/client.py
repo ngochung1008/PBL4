@@ -5,6 +5,7 @@ import time
 from client_controller import ClientController
 from client_screen import ClientScreen
 from transfer_channel import TransferChannel
+from client_transfer import ClientTransfer
 import sys
 import config
 
@@ -71,6 +72,9 @@ if __name__ == "__main__":
     # Gửi handler vào một thread và giữ luồng chính (main) mở
     threading.Thread(target=screen_streamer_loop, args=(screen_handler,), daemon=True).start()
     
+    client_transfer = ClientTransfer(SERVER_HOST, TRANSFER_PORT, username)
+    client_transfer.start()
+
     # GIỮ LUỒNG CHÍNH MỞ: để các luồng daemon tiếp tục chạy
     while True:
         time.sleep(1)

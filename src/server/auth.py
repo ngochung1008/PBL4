@@ -15,7 +15,7 @@ def sign_in(username, password):
     conn = mysql.connector.connect(
         host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
         user="root",            # Tài khoản MySQL
-        password="root",# Mật khẩu MySQL
+        password="@Hung1012",# Mật khẩu MySQL
         database="pbl4"       # Tên database muốn dùng
     )
     query = "SELECT * FROM users WHERE Username = %s"
@@ -43,7 +43,7 @@ def sign_up(username, password, fullname, email):
     conn = mysql.connector.connect(
         host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
         user="root",            # Tài khoản MySQL
-        password="root",# Mật khẩu MySQL
+        password="@Hung1012",# Mật khẩu MySQL
         database="pbl4"       # Tên database muốn dùng
     )
     hashed = ph.hash(password)
@@ -66,7 +66,7 @@ def create_session(user_name, ip, mac_ip):
         conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="root",
+            password="@Hung1012",
             database="pbl4"
         )
         cursor = conn.cursor()

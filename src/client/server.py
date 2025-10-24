@@ -22,6 +22,7 @@ if __name__ == "__main__":
     def signal_handler(sig, frame):
         print('\n[SERVER] Shutdown signal received. Starting graceful shutdown.')
         server.close_all_connections() # Gọi phương thức đóng của lớp
+        print('[SERVER] All connections closed. Exiting now.')
         sys.exit(0)
 
     # Bắt tín hiệu Ctrl+C (SIGINT)
