@@ -81,10 +81,10 @@ class RemoteDesktopServer:
     def handle_client(self, conn, addr):
         print(f"[SERVER] Client connected (Control): {addr}")
 
-		# Thêm conn vào clients list
+        # Thêm conn vào clients list
         with self.clients_lock:
             self.clients.append(conn)
-        
+
         try:
             while self.is_running:
                 data = conn.recv(4096)
@@ -96,13 +96,16 @@ class RemoteDesktopServer:
                         try:
                             m.sendall(data)
                         except:
-                            try: self.managers.remove(m)
-                            except: pass
+                            try:
+                                self.managers.remove(m)
+                            except:
+                                pass
         finally:
-			# Đảm bảo loại bỏ kết nối và đóng socket
             with self.clients_lock:
-                try: self.clients.remove(conn)
-                except ValueError: pass
+                try:
+                    self.clients.remove(conn)
+                except ValueError:
+                    pass
             conn.close()
             print(f"[SERVER] Client disconnected (Control): {addr}")
 
@@ -118,6 +121,8 @@ class RemoteDesktopServer:
     def accept_loop(self, sock, handler_type, port_name):
         """Vòng lặp chấp nhận kết nối cho một cổng cụ thể."""
         print(f"[SERVER] Listening for {port_name} on port {sock.getsockname()[1]}")
+        sock.settimeout(1.0)
+        
         while self.is_running:
             try:
                 conn, addr = sock.accept()

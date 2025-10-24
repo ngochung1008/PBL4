@@ -10,6 +10,7 @@ class ServerScreen:
     def __init__(self, host="0.0.0.0", port=5000):
         self.host = host
         self.port = port
+        self.is_running = True
 
         # { Client_IP: [socket_conn, latest_frame_data] }
         self.clients = {}  
@@ -61,7 +62,7 @@ class ServerScreen:
                             frame_data = self.clients[desired_ip][1] 
                     
                     # 2. Nếu có frame và Manager đang mong muốn
-                    if frame_data:
+                    if desired_ip and frame_data:
                         try:
                             # Gửi header + payload
                             m_conn.sendall(frame_data) 
@@ -103,9 +104,21 @@ class ServerScreen:
                 w, h, length = struct.unpack(">III", header)
                 payload = self._recv_exact(conn, length)
 
+                # Debug log
+                print(f"[SERVER SCREEN] Received frame from {client_ip}: {w}x{h}, {length} bytes")
+
                 # Lưu trữ frame mới nhất (header + payload)
                 with self.clients_lock:
                     self.clients[client_ip][1] = header + payload
+
+                # ⚡ Tùy chọn: gửi nhanh cho tất cả manager đang xem client này
+                with self.managers_lock:
+                    for m_ip, (m_conn, desired_ip) in list(self.managers.items()):
+                        if desired_ip == client_ip:  # chỉ gửi cho manager đang xem client này
+                            try:
+                                m_conn.sendall(header + payload)
+                            except:
+                                print(f"[SERVER SCREEN] Failed to send frame to {m_ip}")
 
                 # Gửi lại cho managers (gồm header + ảnh)
                 # self.broadcast_to_managers(header + payload)
@@ -200,9 +213,14 @@ class ServerScreen:
             pass
         finally:
             # Loại bỏ khỏi danh sách khi kết nối bị ngắt
-            with self.lock:
-                if conn in self.managers:
-                    self.managers.remove(conn)
+            with self.managers_lock:
+                found_ip = None
+                for ip, (m_conn, _) in self.managers.items():
+                    if m_conn == conn:
+                        found_ip = ip
+                        break
+                if found_ip:
+                    del self.managers[found_ip]
             conn.close()
             print(f"[SERVER SCREEN] Manager disconnected (loop ended): {addr}")
 
@@ -226,6 +244,9 @@ class ServerScreen:
             # [socket_conn, desired_client_ip (str)]
             self.managers[manager_ip] = [conn, initial_ip] 
         
+        if initial_ip:
+            print(f"[SERVER SCREEN] Auto-assign Manager {manager_ip} to first client {initial_ip}")
+        
         # 2. Khởi tạo luồng lắng nghe lệnh chọn lọc từ Manager
         # Luồng này cần chạy daemon để không chặn luồng chính
         threading.Thread(target=self.handle_manager_request, args=(conn, manager_ip), daemon=True).start()
@@ -246,7 +267,9 @@ class ServerScreen:
             print(f"[SERVER SCREEN] Failed to start server: {e}")
             return # Thoát nếu không bind được
 
-        while True:
+        server.settimeout(1.0)
+
+        while self.is_running:
             try:
                 conn, addr = server.accept()
                 role = conn.recv(5).decode("utf-8")

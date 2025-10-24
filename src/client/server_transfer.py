@@ -109,6 +109,8 @@ class ServerTransferHandler:
             # --- Relay gói JSON có điều kiện ---
             if target_ip and target_ip in transfer_conns:
                 target_conn = transfer_conns[target_ip]
+                if target_conn.fileno() < 0: 
+                    raise ConnectionError("Target socket closed")
                 # Gói dữ liệu gốc cần được đóng gói lại (Kích thước + Dữ liệu)
                 full_package_to_send = struct.pack('!I', len(package_str)) + package_data
                 
@@ -132,13 +134,13 @@ class ServerTransferHandler:
         except Exception as e:
             print(f"[SERVER-TRANSFER] Handling error: {e}")
 
-    # Hàm tiện ích để đóng tất cả kết nối transfer khi server shutdown
-    def close_all_transfer_connections():
-        with transfer_lock:
-            for ip, conn in list(transfer_conns.items()):
-                try:
-                    conn.shutdown(socket.SHUT_RDWR)
-                    conn.close()
-                except Exception:
-                    pass
-            transfer_conns.clear()
+# Hàm tiện ích để đóng tất cả kết nối transfer khi server shutdown
+def close_all_transfer_connections():
+    with transfer_lock:
+        for ip, conn in list(transfer_conns.items()):
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+                conn.close()
+            except Exception:
+                pass
+        transfer_conns.clear()

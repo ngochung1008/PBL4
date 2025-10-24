@@ -46,6 +46,9 @@ class ClientScreen:
 
                         # 3. Gửi ảnh đã nén lên Server với header (width, height, length)
                         header = struct.pack(">III", w, h, len(jpg))
+
+                        # debug log
+                        print(f"[CLIENT SCREEN] Sending frame {w}x{h}, {len(jpg)} bytes")
                         
                         # 4. Gửi dữ liệu qua socket
                         s.sendall(header + jpg)
