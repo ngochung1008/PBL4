@@ -131,11 +131,20 @@ class ClientTransfer:
             print(f"[CLIENT TRANSFER] Error in receive loop: {e}")
         finally:
             if self.receiving_file_handle:
+                is_incomplete = self.received_bytes < self.target_filesize
+            
                 try:
                     self.receiving_file_handle.close()
-                    print(f"[CLIENT TRANSFER] WARNING: File {self.receiving_file_name} was incomplete, but closed due to disconnect.")
-                except Exception:
-                    pass
+                    self.receiving_file_handle = None # Đảm bảo reset handle
+                    
+                    if is_incomplete and self.receiving_file_path:
+                        # Nếu file chưa hoàn chỉnh, ta xóa nó đi để tránh file hỏng
+                        print(f"[CLIENT TRANSFER] WARNING: Transfer of {self.receiving_file_name} failed. Deleting incomplete file.")
+                        os.remove(self.receiving_file_path) 
+                    
+                except Exception as close_e:
+                    print(f"[CLIENT TRANSFER] Error closing/deleting file: {close_e}")
+            
             if self.sock:
                 self.sock.close()
             print("[CLIENT TRANSFER] Disconnected from transfer server.")
