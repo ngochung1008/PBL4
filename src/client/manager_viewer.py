@@ -38,6 +38,8 @@ class ScreenReceiver(QThread):
         self.host = host
         self.port = port
         self._running = True # flag để điều khiển vòng lặp run()
+        self.sock = None # ⚡ THÊM: Lưu trữ socket
+        self.target_ip = None # ⚡ THÊM: IP Client mục tiêu (nếu biết)
 
     def recv_all(self, sock, n):
         data = b"" # Khởi tạo buffer rỗng
@@ -51,10 +53,13 @@ class ScreenReceiver(QThread):
     def run(self):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                self.sock = sock
+                print(f"[MANAGER VIEWER] Attempting connection to screen {self.host}:{self.port}")
                 sock.connect((self.host, self.port)) # kết nối tới server
                 print("[MANAGER VIEWER] Connected to server for screen")
 
                 sock.sendall(b"MGR:")  # handshake 
+                self.send_select_command()
                 while self._running:
                     header = self.recv_all(sock, 12)
                     if not header:
@@ -81,6 +86,20 @@ class ScreenReceiver(QThread):
             """Phát ra tín hiệu thông báo lỗi khi kết nối bị mất."""
             self.connection_lost.emit(str(e))
             self.quit()
+        finally:
+            self.sock = None
+
+    # Gửi lệnh chọn Client
+    def send_select_command(self):
+        """Gửi SELECT lệnh (ví dụ: SELECT:auto hoặc SELECT:IP)"""
+        if self.sock:
+            try:
+                # Gửi lệnh yêu cầu Server tự động chọn Client đầu tiên
+                command = "SELECT:auto\n" 
+                self.sock.sendall(command.encode('utf-8'))
+                print(f"[SCREEN RECEIVER] Sent SELECT:auto command.")
+            except Exception as e:
+                print(f"[SCREEN RECEIVER] Failed to send SELECT command: {e}")
 
     def stop(self):
         self._running = False
@@ -102,6 +121,9 @@ class ManagerViewer(QWidget):
         layout = QVBoxLayout(self) # QVBoxLayout (Vertical Box Layout) là một layout sắp xếp các widgets theo chiều dọc (từ trên xuống dưới)
         layout.addWidget(self.label)
         self.setLayout(layout)
+
+        self.label.setMouseTracking(True)
+        self._captured = False
 
         # remote sizes (kích thước thực màn hình)
         self.remote_width = 1
@@ -216,6 +238,10 @@ class ManagerViewer(QWidget):
         self.remote_width = w
         self.remote_height = h
 
+        if qimg is None or qimg.isNull():
+            print("[MANAGER VIEWER] Received empty QImage, skipping update.")
+            return
+
         pixmap = QPixmap.fromImage(qimg) # Tạo QPixmap từ QImage nhận được
         label_size = self.label.size() # Lấy kích thước hiện tại của QLabel
         # Co giãn (scaled) QPixmap để vừa với label_size nhưng giữ nguyên tỉ lệ (KeepAspectRatio)
@@ -245,6 +271,28 @@ class ManagerViewer(QWidget):
         super().resizeEvent(event)
 
     # --- mapping helpers ---
+    # Thêm override xử lý chuột trên label: click để toggle control
+    def label_mouse_press(self, event):
+        # Toggle capture
+        self._captured = not self._captured
+        if self._captured:
+            QGuiApplication.setOverrideCursor(Qt.CursorShape.BlankCursor)
+            self.cursor_label.show()
+            if self.input_handler:
+                self.input_handler.is_controlling = True
+            print("[MANAGER VIEWER] Capture ENABLED (click)")
+        else:
+            QGuiApplication.restoreOverrideCursor()
+            self.cursor_label.hide()
+            if self.input_handler:
+                self.input_handler.is_controlling = False
+            print("[MANAGER VIEWER] Capture DISABLED (click)")
+        # don't call super here because label is a child widget; just accept event
+        event.accept()
+
+    # Hook up the handler in __init__ after label created:
+    # self.label.mousePressEvent = self.label_mouse_press
+
     # Ánh xạ tọa độ Label <-> Remote screen (tọa độ chuột)
     def label_coords_to_remote(self, lx, ly):
         """Chuyển tọa độ trong label sang tọa độ remote.

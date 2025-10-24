@@ -36,6 +36,20 @@ class RemoteDesktopServer:
         # Luồng ServerScreen
         self.screen_thread = None
 
+    def get_active_client_ips_from_control(self):
+        """Lấy danh sách IP của Client đang kết nối tới Control Port."""
+        active_ips = []
+        with self.clients_lock:
+            for conn in self.clients:
+                try:
+                    # Lấy IP từ thông tin kết nối socket
+                    # Lưu ý: Client kết nối đến CLIENT_PORT (9011), Manager kết nối đến CONTROL_PORT (9010)
+                    active_ips.append(conn.getpeername()[0])
+                except:
+                    pass
+        # Nếu chỉ có 1 Client thì lấy Client đó (Nếu có)
+        return list(set(active_ips))
+
     # Server nhận lệnh từ Manager -> Forward cho Client.
     def handle_manager(self, conn, addr):
         print(f"[SERVER] Manager connected (Control): {addr}")
@@ -135,11 +149,15 @@ class RemoteDesktopServer:
                 elif handler_type == "client":
                     threading.Thread(target=self.handle_client, args=(conn, addr), daemon=True).start()
                     
+            except socket.timeout:
+                # Bỏ qua lỗi timeout và tiếp tục lắng nghe
+                continue 
             except socket.error as e:
+                # Thoát vòng lặp nếu có lỗi khác timeout (hoặc socket bị đóng)
                 if self.is_running:
                     if "closed" not in str(e):
-                        print(f"[SERVER] Accept loop error ({port_name}): {e}")
-                break # Thoát vòng lặp nếu socket bị đóng
+                        print(f"[SERVER] Accept loop non-timeout error ({port_name}): {e}")
+                break
 
     def start_control_server(self):
         """Khởi tạo các socket lắng nghe và bắt đầu các luồng chấp nhận kết nối."""

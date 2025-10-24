@@ -7,13 +7,13 @@ import json
 import threading
 import os
 import time
+import base64
 
 class ClientTransfer:
     """
     Lớp ClientTransfer:
-    - Kết nối đến server_transfer.py (ở SERVER)
     - Nhận JSON gói tin ("chat", "file_meta", "file_data")
-    - Nhận file binary và lưu xuống thư mục ./received_files/
+    - Nhận file Base64 chunk, giải mã và lưu
     """
     def __init__(self, server_host, transfer_port, username="client"):
         self.server_host = server_host
@@ -22,6 +22,13 @@ class ClientTransfer:
         self.sock = None
         self.is_running = True
         self.save_dir = os.path.join(os.getcwd(), "received_files")
+        
+        # Biến theo dõi quá trình nhận file
+        self.receiving_file_name = None 
+        self.receiving_file_path = None 
+        self.receiving_file_handle = None 
+        self.received_bytes = 0
+        self.target_filesize = 0
 
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
@@ -43,9 +50,61 @@ class ClientTransfer:
                 return
         threading.Thread(target=self._recv_loop, daemon=True).start()
 
+    # Hàm xử lý gói JSON nhận được (được gọi từ _recv_loop)
+    def _handle_package(self, pkg):
+        pkg_type = pkg.get("type")
+        sender = pkg.get("sender")
+        data = pkg.get("data")
+        
+        if pkg_type == "chat":
+            print(f"[CHAT] {sender}: {data}")
+
+        elif pkg_type == "file_meta":
+            filename = data.get("filename", "unknown_file")
+            filesize = data.get("size", 0) 
+            
+            # Đóng file cũ nếu đang mở
+            if self.receiving_file_handle:
+                 self.receiving_file_handle.close()
+                 print(f"\n[CLIENT TRANSFER] WARNING: Closed previous file ({self.receiving_file_name}) before completion.")
+            
+            # Khởi tạo nhận file
+            self.receiving_file_name = filename
+            self.receiving_file_path = os.path.join(self.save_dir, filename)
+            self.receiving_file_handle = open(self.receiving_file_path, "wb")
+            self.received_bytes = 0
+            self.target_filesize = filesize
+
+            print(f"[CLIENT TRANSFER] Receiving file '{filename}' ({filesize} bytes) from {sender} ...")
+
+        elif pkg_type == "file_data":
+            chunk_b64 = data.get("chunk", "")
+            bytes_len = data.get("bytes", 0)
+            
+            if self.receiving_file_handle:
+                try:
+                    chunk = base64.b64decode(chunk_b64)
+                    self.receiving_file_handle.write(chunk)
+                    self.received_bytes += bytes_len
+                    self._print_progress(self.received_bytes, self.target_filesize)
+                except Exception as e:
+                    print(f"\n[CLIENT TRANSFER] Error writing chunk: {e}")
+
+        elif pkg_type == "file_end":
+            if self.receiving_file_handle:
+                self.receiving_file_handle.close()
+                self.receiving_file_handle = None
+                print(f"\n[CLIENT TRANSFER] File saved: {self.receiving_file_path}")
+            else:
+                print("\n[CLIENT TRANSFER] Received file_end without active transfer.")
+
+        else:
+            # Chỉ in ra nếu không phải là gói file (vì gói file data rất nhiều)
+            if pkg_type not in ["file_meta", "file_data", "file_end"]:
+                 print(f"[CLIENT TRANSFER] Unknown package type: {pkg_type}")
+
     def _recv_loop(self):
         """Vòng lặp chính nhận gói tin"""
-        buffer = b""
         try:
             while self.is_running:
                 # Nhận header độ dài (4 bytes)
@@ -61,27 +120,10 @@ class ClientTransfer:
 
                 try:
                     pkg = json.loads(pkg_data.decode("utf-8"))
+                    self._handle_package(pkg) # Xử lý gói nhận được
                 except Exception as e:
                     print("[CLIENT TRANSFER] JSON parse error:", e)
                     continue
-
-                pkg_type = pkg.get("type")
-                sender = pkg.get("sender")
-                data = pkg.get("data")
-
-                # === Xử lý các loại gói ===
-                if pkg_type == "chat":
-                    print(f"[CHAT] {sender}: {data}")
-
-                elif pkg_type == "file_meta":
-                    filename = data.get("filename", "unknown_file")
-                    filesize = data.get("filesize", 0)
-                    print(f"[CLIENT TRANSFER] Receiving file '{filename}' ({filesize} bytes) from {sender} ...")
-
-                    self._recv_file(filename, filesize)
-
-                else:
-                    print(f"[CLIENT TRANSFER] Unknown package type: {pkg_type}")
 
         except Exception as e:
             print(f"[CLIENT TRANSFER] Error in receive loop: {e}")
@@ -89,25 +131,6 @@ class ClientTransfer:
             if self.sock:
                 self.sock.close()
             print("[CLIENT TRANSFER] Disconnected from transfer server.")
-
-    def _recv_file(self, filename, filesize):
-        """Nhận dữ liệu file binary sau khi có metadata"""
-        file_path = os.path.join(self.save_dir, filename)
-        received = 0
-
-        try:
-            with open(file_path, "wb") as f:
-                while received < filesize:
-                    chunk = self.sock.recv(min(4096, filesize - received))
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    received += len(chunk)
-                    self._print_progress(received, filesize)
-
-            print(f"\n[CLIENT TRANSFER] File saved: {file_path}")
-        except Exception as e:
-            print(f"[CLIENT TRANSFER] Error receiving file: {e}")
 
     def _print_progress(self, done, total):
         """Hiển thị tiến trình nhận file"""

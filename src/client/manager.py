@@ -1,5 +1,6 @@
 # manager.py
 
+import os
 import threading
 import socket
 import sys
@@ -97,6 +98,18 @@ if __name__ == "__main__":
     if not transfer_channel.connect():
         print("[MANAGER] Could not connect to transfer server.")
         # Xử lý lỗi nếu cần
+
+    # IP của Client mà Manager muốn gửi file đến (ví dụ)
+    TARGET_CLIENT_IP = '10.10.49.57' # <--- THAY THẾ IP NÀY BẰNG IP CLIENT THỰC TẾ
+    FILE_TO_SEND = "test_file.txt" 
+
+    # Tạo file dummy nếu chưa có
+    if not os.path.exists(FILE_TO_SEND):
+        with open(FILE_TO_SEND, "w") as f:
+            f.write("This is a test file for remote transfer.")
+
+    # Gửi file trong một luồng riêng để không chặn luồng chính UI
+    threading.Thread(target=transfer_channel.send_file, args=(FILE_TO_SEND, TARGET_CLIENT_IP), daemon=True).start()
 
     # Chờ frame đầu tiên để có thể map tọa độ (đảm bảo remote_width có giá trị)
     waited = 0.0

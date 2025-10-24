@@ -111,6 +111,13 @@ class ServerScreen:
                 with self.clients_lock:
                     self.clients[client_ip][1] = header + payload
 
+                # ⚡ PHẦN MỚI: Tự động gán Client này cho Managers đang chờ
+                with self.managers_lock:
+                    for m_ip, (m_conn, desired_ip) in list(self.managers.items()):
+                        if desired_ip is None: # Nếu Manager này chưa xem Client nào
+                            self.managers[m_ip][1] = client_ip # Gán Client mới
+                            print(f"[SERVER SCREEN] Auto-assigning Manager {m_ip} to new client {client_ip}")
+
                 # ⚡ Tùy chọn: gửi nhanh cho tất cả manager đang xem client này
                 with self.managers_lock:
                     for m_ip, (m_conn, desired_ip) in list(self.managers.items()):
@@ -167,6 +174,10 @@ class ServerScreen:
                     
                     if command.startswith("SELECT:"):
                         desired_ip = command.split(":")[1]
+                        if desired_ip == "auto":
+                            active_clients = self.get_active_client_ips()
+                            desired_ip = active_clients[0] if active_clients else None
+                            print(f"[SERVER SCREEN] Manager {manager_ip} requested auto-select. Chosen: {desired_ip}")
                         with self.managers_lock:
                             if manager_ip in self.managers:
                                 self.managers[manager_ip][1] = desired_ip
@@ -239,13 +250,16 @@ class ServerScreen:
         print("[SERVER SCREEN] Manager connected:", manager_ip)
         
         # 1. Đăng ký Manager vào danh sách (Ban đầu xem client đầu tiên hoặc None)
-        initial_ip = self.get_active_client_ips()[0] if self.get_active_client_ips() else None
+        active_clients = self.get_active_client_ips()
+        initial_ip = active_clients[0] if active_clients else None
         with self.managers_lock:
             # [socket_conn, desired_client_ip (str)]
             self.managers[manager_ip] = [conn, initial_ip] 
         
         if initial_ip:
             print(f"[SERVER SCREEN] Auto-assign Manager {manager_ip} to first client {initial_ip}")
+        else:
+            print(f"[SERVER SCREEN] No active clients found for Manager {manager_ip}. Waiting for SELECT command.")
         
         # 2. Khởi tạo luồng lắng nghe lệnh chọn lọc từ Manager
         # Luồng này cần chạy daemon để không chặn luồng chính
@@ -258,7 +272,6 @@ class ServerScreen:
     def run(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Nên thêm để tránh lỗi "Address already in use"
-        
         try:
             server.bind((self.host, self.port))
             server.listen(5)
@@ -284,12 +297,13 @@ class ServerScreen:
                 else:
                     print("[SERVER SCREEN] Unknown role, closing", addr)
                     conn.close()
-            except socket.error:
-                # Socket error thường xảy ra khi server.close() được gọi từ bên ngoài (graceful shutdown)
-                break
+            except socket.timeout: 
+                continue 
             except Exception as e:
-                print(f"[SERVER SCREEN] Accept loop general error: {e}")
-                
+                # Thoát nếu có lỗi khác (hoặc socket bị đóng khi self.is_running = False)
+                if self.is_running and "closed" not in str(e):
+                    print(f"[SERVER SCREEN] Accept loop general error: {e}") 
+                break   
         # Đóng socket lắng nghe khi thoát vòng lặp
         server.close()
         print("[SERVER SCREEN] ServerScreen listener stopped.")

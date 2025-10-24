@@ -1,10 +1,11 @@
 # transfer_channel.py
-
+import sys
 import socket
 import threading
 import json
 import struct
 import os 
+import base64 # Import cần thiết
 
 class TransferChannel:
     def __init__(self, server_host, transfer_port, on_receive_callback):
@@ -38,6 +39,9 @@ class TransferChannel:
                 
                 # Logic phân tách gói tin
                 while len(self.buffer) >= 4:
+                    # Đảm bảo có đủ 4 bytes
+                    if len(self.buffer) < 4: break 
+                        
                     package_size = struct.unpack('!I', self.buffer[:4])[0]
                     
                     if len(self.buffer) >= 4 + package_size:
@@ -45,6 +49,7 @@ class TransferChannel:
                         self.buffer = self.buffer[4 + package_size:]
                         
                         try:
+                            # Phân tích gói JSON và gọi callback
                             pkg = json.loads(package_data.decode('utf-8'))
                             self.on_receive(pkg)
                         except json.JSONDecodeError:
@@ -69,11 +74,11 @@ class TransferChannel:
                 pass
             self.sock = None
 
-    # Hàm gửi dữ liệu (Chat hoặc File Meta)
+    # Hàm gửi dữ liệu (Chat hoặc File Meta/Data/End)
     def send_package(self, pkg_type, target_ip, data):
         if not self.is_connected:
             print("[TRANSFER] Not connected to server.")
-            return
+            return False
 
         pkg = {
             "type": pkg_type,
@@ -92,12 +97,13 @@ class TransferChannel:
             self.sock.sendall(header + pkg_bytes)
             return True
         except Exception as e:
-            print(f"[TRANSFER] Send error: {e}")
+            # print(f"[TRANSFER] Send error: {e}") # Bỏ in lỗi để tránh spam terminal
             self.is_connected = False
+            self.close()
             return False
         
     def send_file(self, file_path, target_ip):
-        """Gửi file: Gửi metadata (JSON) trước, sau đó gửi dữ liệu thô (binary)."""
+        """Gửi file: Gửi metadata, sau đó gửi dữ liệu theo CHUNKS JSON/Base64."""
         if not self.is_connected:
             print("[TRANSFER] Not connected to server.")
             return False
@@ -114,26 +120,44 @@ class TransferChannel:
             "filename": file_name,
             "size": file_size,
         }
-        
         if not self.send_package("file_meta", target_ip, file_meta_data):
             print("[TRANSFER] Failed to send file metadata.")
             return False
 
-        print(f"[TRANSFER] Sent metadata for {file_name} to {target_ip}. Starting data transfer...")
+        print(f"[TRANSFER] Sent metadata for {file_name} to {target_ip}. Starting CHUNK data transfer...")
         
-        # 2. Gửi dữ liệu file thô ngay sau gói metadata
-        self._send_file_data(file_path)
-        return True
-
-    def _send_file_data(self, file_path):
-        """Gửi dữ liệu file thô qua socket hiện tại (Không dùng JSON/Header nữa)."""
+        # 2. Gửi dữ liệu file theo CHUNKS
+        CHUNK_SIZE = 3072 # Kích thước chunk hợp lý 
+        bytes_sent = 0
+        
         try:
-            self.sock.sendall(b"FILEDATA") 
             with open(file_path, 'rb') as f:
-                while chunk := f.read(4096):
-                    self.sock.sendall(chunk)
-            print(f"[TRANSFER] Finished sending file data for {os.path.basename(file_path)}.")
+                while True:
+                    chunk = f.read(CHUNK_SIZE)
+                    if not chunk: break
+                        
+                    # Mã hóa Base64
+                    base64_chunk = base64.b64encode(chunk).decode('utf-8')
+                    
+                    # Gửi gói file_data
+                    file_data_pkg = {
+                        "chunk": base64_chunk,
+                        "bytes": len(chunk) # Kích thước data gốc
+                    }
+                    if not self.send_package("file_data", target_ip, file_data_pkg):
+                        raise Exception("Failed to send file data chunk.")
+                        
+                    bytes_sent += len(chunk)
+                    sys.stdout.write(f"\r[TRANSFER] Progress: {bytes_sent/file_size*100:.1f}%")
+                    sys.stdout.flush()
+
+            # 3. Gửi gói kết thúc
+            self.send_package("file_end", target_ip, {})
+            print(f"\n[TRANSFER] Finished sending file data for {file_name}.")
+            return True
+            
         except Exception as e:
-            print(f"[TRANSFER] Error sending file data: {e}")
+            print(f"\n[TRANSFER] Error sending file data: {e}")
             self.is_connected = False
             self.close()
+            return False
