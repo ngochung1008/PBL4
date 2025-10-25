@@ -2,6 +2,7 @@
 
 import threading
 import time
+from datetime import datetime
 from client_controller import ClientController
 from client_screen import ClientScreen
 from transfer_channel import TransferChannel
@@ -41,13 +42,6 @@ def controller_loop(controller):
 if __name__ == "__main__":
     username = "client1"
 
-    # Khởi tạo luồng Input Controller (nhận lệnh từ SERVER -> CLIENT)
-    controller = ClientController(SERVER_HOST, CLIENT_PORT, username)
-    threading.Thread(target=controller_loop, args=(controller,), daemon=True).start()
-
-    # Khởi tạo luồng Screen Streamer (gửi frame từ CLIENT -> SERVER)
-    screen_handler = ClientScreen(SERVER_HOST, SCREEN_PORT, FPS)
-
     # 1. Định nghĩa callback để xử lý gói nhận
     def handle_transfer_package(pkg):
         pkg_type = pkg.get("type")
@@ -56,25 +50,27 @@ if __name__ == "__main__":
 
         if pkg_type == "chat":
             print(f"[CHAT] {sender} said: {data}")
-            # Hiển thị tin nhắn chat trên Client
         elif pkg_type == "file_meta":
-            # Bắt đầu nhận file (tên file, kích thước)
             print(f"[FILE] Receiving file metadata from {sender}: {data['filename']}")
-            # Chuẩn bị luồng/lớp để nhận dữ liệu file
-        # ... (thêm logic xử lý file data) ...
 
-    # 2. Khởi tạo và kết nối TransferChannel
+    # 2. Khởi tạo và kết nối TransferChannel (Cần chạy trước Controller)
     transfer_channel = TransferChannel(SERVER_HOST, TRANSFER_PORT, handle_transfer_package)
     if not transfer_channel.connect():
         print("[CLIENT] Could not connect to transfer server.")
-        # Xử lý lỗi nếu cần
-    
-    # Gửi handler vào một thread và giữ luồng chính (main) mở
-    threading.Thread(target=screen_streamer_loop, args=(screen_handler,), daemon=True).start()
-    
+        sys.exit(1)
+        
+    # 3. Khởi tạo ClientTransfer (Cho file data/meta)
     client_transfer = ClientTransfer(SERVER_HOST, TRANSFER_PORT, username)
     client_transfer.start()
 
-    # GIỮ LUỒNG CHÍNH MỞ: để các luồng daemon tiếp tục chạy
+    # 4. Khởi tạo luồng Input Controller (truyền kênh Transfer vào)
+    controller = ClientController(SERVER_HOST, CLIENT_PORT, username, transfer_channel=transfer_channel) 
+    threading.Thread(target=controller_loop, args=(controller,), daemon=True).start()
+
+    # 5. Khởi tạo luồng Screen Streamer 
+    screen_handler = ClientScreen(SERVER_HOST, SCREEN_PORT, FPS)
+    threading.Thread(target=screen_streamer_loop, args=(screen_handler,), daemon=True).start()
+
+    # GIỮ LUỒNG CHÍNH MỞ
     while True:
         time.sleep(1)
