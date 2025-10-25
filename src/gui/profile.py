@@ -10,8 +10,6 @@ from src.gui.ui_components import (
     create_primary_button, create_back_button
 )
 
-from src.client.auth import client_checkpassword, client_edit, client_profile
-
 LIGHT_TEXT = "#FFFFFF"
 
 
@@ -156,7 +154,7 @@ class ProfileWindow(QWidget):
         email_new = self.email.text().strip() if self.email.text().strip() else self.user.Email
 
         print("aaaaa", passed_old, passed_new, fullname_new, email_new)
-        editable = False if not passed_old else client_checkpassword(self.user.UserID, passed_old)
+        editable = False if not passed_old else QApplication.instance().conn.client_checkpassword(self.user.UserID, passed_old)
         
         if not editable:
             QMessageBox.warning(None, "Error", "Password is incorrect!")
@@ -167,9 +165,9 @@ class ProfileWindow(QWidget):
             if self.new_pass.text().strip() == self.old_pass.text().strip():
                 QMessageBox.warning(None, "Error", "New password must be different from old password!")
                 return
-            client_edit(self.user.UserID, fullname_new, email_new, passed_new)
+            QApplication.instance().conn.client_edit(self.user.UserID, fullname_new, email_new, passed_new)
         else:
-            client_edit(self.user.UserID, fullname_new, email_new)
+            QApplication.instance().conn.client_edit(self.user.UserID, fullname_new, email_new)
         QMessageBox.information(None, "Success", "Profile updated successfully!")
         self.refresh_user_data()
         
@@ -178,7 +176,7 @@ class ProfileWindow(QWidget):
 
     def refresh_user_data(self):
         from src.model.Users import User
-        data = client_profile(self.token)
+        data = QApplication.instance().conn.client_profile(self.token)
         new_user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
         
         self.user = new_user  # cập nhật lại dữ liệu user

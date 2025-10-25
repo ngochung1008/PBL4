@@ -13,7 +13,7 @@ from src.gui.ui_components import (
     create_primary_button, create_back_button
 )
 
-from src.client.auth import client_login, client_profile
+# from src.client.auth import client_login, client_profile
 import threading
 
 class SignInWindow(QWidget):
@@ -118,20 +118,23 @@ class SignInWindow(QWidget):
         if not username or not password:
             QMessageBox.warning(None, "Error", "Please fill in all fields!")
             return
-        token = client_login(username, password) 
+        token = QApplication.instance().conn.client_login(username, password) 
         if not token:
             QMessageBox.critical(None, "Error", "Sign in failed! Check your credentials.")
             return
         QMessageBox.information(None, "Success", f"Account created for {username}!")
         self.token = token 
         QApplication.instance().current_user = token
-        from src.gui.profile import ProfileWindow
-        from src.model.Users import User
-        data = client_profile(token)
-        print(".. ", data)
-        user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
-        self.profile_window = ProfileWindow(user, token)
-        self.profile_window.showMaximized()
+        # from src.gui.profile import ProfileWindow
+        # from src.model.Users import User
+        # data = QApplication.instance().conn.client_profile(token)
+        # print(".. ", data)
+        # user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+        # self.profile_window = ProfileWindow(user, token)
+        # self.profile_window.showMaximized()
+        from src.gui.manage_clients import ManageClientsWindow
+        self.manage_clients_window = ManageClientsWindow()
+        self.manage_clients_window.show()
         self.close()
 
     def sign_up(self):

@@ -5,11 +5,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from ui_components import DARK_BG, create_back_button
+from src.gui.ui_components import DARK_BG, create_back_button
 
 SPOTIFY_GREEN = "#1DB954"
 CARD_BG = "#181818"
 TEXT_LIGHT = "#FFFFFF"
+
 
 
 class AddClientWindow(QWidget):
@@ -69,7 +70,8 @@ class AddClientWindow(QWidget):
                 background-color: #1ed760;
             }}
         """)
-
+        self.btn_connect.clicked.connect(self.connect_client)
+        
         # Status label
         self.status_label = QLabel("Status: Not connected")
         self.status_label.setFixedHeight(42)
@@ -96,15 +98,32 @@ class AddClientWindow(QWidget):
         self.back_btn.clicked.connect(self.open_manage_clients)
 
     def open_manage_clients(self):
-        from manage_clients import ManageClientsWindow  # ✅ import muộn tránh lỗi vòng lặp
+        from src.gui.manage_clients import ManageClientsWindow  # ✅ import muộn tránh lỗi vòng lặp
         self.manage_clients_window = ManageClientsWindow()
         self.manage_clients_window.show()
         self.close()
 
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setFont(QFont("Segoe UI", 10))
-    w = AddClientWindow()
-    w.show()
-    sys.exit(app.exec())
+    def connect_client(self):
+        username = self.ip_edit.text().strip()
+        if not username:
+            self.status_label.setText("Status: Please enter a valid IP address.")
+            return
+        if any(username == x for x, y in QApplication.instance().client_connected):
+            self.status_label.setText(f"Status: Client {username} is already connected.")
+            return
+        try: 
+            success, token = QApplication.instance().conn.client_check(username)
+            if success:
+                QApplication.instance().client_connected.append([username, token])
+                self.status_label.setText(f"Status: Successfully connected to {username}.")
+            else:
+                self.status_label.setText(f"Status: Failed to connect to {username}.")
+        except Exception as e:
+            self.status_label.setText(f"Status: Error occurred - {str(e)}.")
+    
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+#     app.setFont(QFont("Segoe UI", 10))
+#     w = AddClientWindow()
+#     w.show()
+#     sys.exit(app.exec())
