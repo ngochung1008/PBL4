@@ -11,8 +11,7 @@ def on_app_exit():
     print("⏳ Ứng dụng chuẩn bị thoát, cập nhật LastLogin...")
     if QApplication.instance().current_user is None:
         return
-    from src.client.auth import client_logout
-    client_logout(QApplication.instance().current_user)
+    QApplication.instance().conn.client_logout(QApplication.instance().current_user)
     print("✅ Đã cập nhật LastLogin.")
 
 if __name__ == "__main__":
@@ -28,6 +27,9 @@ if __name__ == "__main__":
     # print(sign_in("admin", "admin12"))
     # print(get_user_by_sessionid("d3e6d5c2-ab5d-11f0-87af-005056c00001"))
     app = QApplication(sys.argv)
+    from src.client.auth import ClientConnection
+    app.conn = ClientConnection()
+    app.client_connected = []
     app.current_user = None  # lưu thông tin user hiện tại
     app.aboutToQuit.connect(on_app_exit)
     win = SignInWindow()

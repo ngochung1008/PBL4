@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from ui_components import DARK_BG, create_back_button
+from src.gui.ui_components import DARK_BG, create_back_button
 
 # Bảng màu
 SPOTIFY_GREEN = "#1DB954"

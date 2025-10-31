@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from ui_components import (
+from src.gui.ui_components import (
     SPOTIFY_GREEN, DARK_BG, CARD_BG, TEXT_LIGHT, SUBTEXT,
     create_back_button, create_search_bar, create_client_list
 )
@@ -66,12 +66,8 @@ class ManageClientsWindow(QWidget):
                 border-radius: 4px;
             }}
         """)
-        self.client_list.addItems([
-            "Client : Alice ",
-            "Client : Bob",
-            "Client : Charlie",
-            "Client : David"
-        ])
+        for name in QApplication.instance().client_connected:
+            self.client_list.addItem(name[0])
 
         add_btn = QPushButton("Add Client")
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -88,6 +84,8 @@ class ManageClientsWindow(QWidget):
                 opacity: 0.85;
             }}
         """)
+        add_btn.clicked.connect(self.open_add_client)
+        
         self.client_list.currentRowChanged.connect(self.show_client_info)
         sidebar_layout.addWidget(self.client_list, stretch=1)
         sidebar_layout.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignBottom)
@@ -100,14 +98,14 @@ class ManageClientsWindow(QWidget):
         info_layout.setSpacing(6)
         self.lbl_username = QLabel("-")
         self.lbl_email = QLabel("-")
-        self.lbl_ip = QLabel("-")
+        self.lbl_fullname = QLabel("-")
 
-        for lbl in [self.lbl_username, self.lbl_email, self.lbl_ip]:
+        for lbl in [self.lbl_username, self.lbl_email, self.lbl_fullname]:
             lbl.setStyleSheet(f"color: {TEXT_LIGHT}; font-size: 10pt;")
 
         info_layout.addRow("Username:", self.lbl_username)
         info_layout.addRow("Email:", self.lbl_email)
-        info_layout.addRow("IP:", self.lbl_ip)
+        info_layout.addRow("IP:", self.lbl_fullname)
         sidebar_layout.addWidget(self.info_frame)
 
         # Label trạng thái ngay dưới khung info
@@ -190,28 +188,34 @@ class ManageClientsWindow(QWidget):
             self.lbl_status.setText("Status: -")
             return
 
-        text = self.client_list.item(index).text()
-        name = text.split(":")[1].split("(")[0].strip()
-        data = self.client_data.get(name)
+        name = self.client_list.item(index).text()
+        token = QApplication.instance().client_connected[index][1]
+        data = QApplication.instance().conn.client_profile(token)
+        
         if data:
             self.lbl_username.setText(name)
-            self.lbl_email.setText(data["email"])
-            self.lbl_ip.setText(data["ip"])
+            self.lbl_email.setText(data[4])
+            self.lbl_fullname.setText(data[3])
             # Màu cho trạng thái
-            if data["status"].lower() == "connected":
-                self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {SPOTIFY_GREEN};")
-            else:
-                self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: gray;")
-            self.lbl_status.setText(f"Status: {data['status']}")
+            # if data["status"].lower() == "connected":
+            self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {SPOTIFY_GREEN};")
+            # else:
+            #     self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: gray;")
+            # self.lbl_status.setText(f"Status: {data['status']}")
+
+    def open_add_client(self):
+        from src.gui.add_client import AddClientWindow  # ✅ import muộn tránh lỗi vòng lặp
+        self.add_client_window = AddClientWindow()
+        self.add_client_window.show()
+        self.close()
+            
+# def main():
+#     app = QApplication(sys.argv)
+#     app.setFont(QFont("Segoe UI", 10))
+#     win = ManageClientsWindow()
+#     win.show()
+#     sys.exit(app.exec())
 
 
-def main():
-    app = QApplication(sys.argv)
-    app.setFont(QFont("Segoe UI", 10))
-    win = ManageClientsWindow()
-    win.show()
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

@@ -9,6 +9,8 @@ from datetime import datetime
 HOST = "0.0.0.0"
 PORT = 5000
 
+clients = {} 
+
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
@@ -81,6 +83,7 @@ def handle_login(conn, addr):
         send_message(conn, 0)
     else:
         token = auth.create_session(username, addr[0], get_mac_from_ip(addr[0]))
+        clients[username] = [conn, addr, username, token]
         print(f"[TOKEN] {token}")
         send_message(conn, 1, token)
 
@@ -94,7 +97,9 @@ def handle_profile(conn):
 def handle_logout(conn):
     token = read_field(conn).decode("utf-8")
     user = auth.log_out(token)
-
+    userid = auth.get_user_by_sessionid(token)
+    username = auth.get_user_by_id(userid)[1]
+    clients.pop(username, None)
     send_json(conn, 1, user)
 
 def handle_signup(conn):
@@ -148,6 +153,16 @@ def handle_file(conn):
     print(f"[FILE] was saved recv_{filename} ({file_len} bytes)")
     return f"Received file {filename}".encode("utf-8")
 
+def client_check(conn):
+    username = read_field(conn).decode("utf-8")
+    print(f"[CHECK] {username}")
+    check = clients.get(username) is not None
+    print(f"[CHECK] {username} ket qua: {check}")
+    if  (check == False):
+        send_message(conn, 0)
+    else:
+        send_message(conn, 1, auth.get_session_by_username(username))
+        
 def client_thread(conn, addr):
     print(f"[+] Connect from {addr}")
     try:
@@ -176,6 +191,9 @@ def client_thread(conn, addr):
             elif msg_type == 6:
                 print(f"[{addr}] Edit user request")
                 client_edit(conn)
+            elif msg_type == 7:
+                print(f"[{addr}] Check username request")
+                client_check(conn)
             else:
                 print("NO")
                 reply = b"Unknown type"

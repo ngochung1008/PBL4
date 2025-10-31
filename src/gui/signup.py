@@ -10,7 +10,6 @@ from src.gui.ui_components import (
     DARK_BG, create_card, create_title, create_input,
     create_primary_button, create_back_button
 )
-from src.client.auth import client_signup
 
 class SignUpWindow(QWidget):
     def __init__(self):
@@ -96,7 +95,7 @@ class SignUpWindow(QWidget):
         right_img.setStyleSheet(f"background-color: {DARK_BG};")
         right_img.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        pixmap = QPixmap(r"H:\pbl4\PBL4\image\image.png")
+        pixmap = QPixmap("image/image.png")
         if not pixmap.isNull():
             right_img.setPixmap(pixmap)
             right_img.setScaledContents(True)  
@@ -114,7 +113,7 @@ class SignUpWindow(QWidget):
         if not username or not password or not fullname or not email:
             QMessageBox.warning(None, "Error", "Please fill in all fields!")
             return
-        success = client_signup(username, password, fullname, email)
+        success = QApplication.instance().conn.client_signup(username, password, fullname, email)
         if not success:
             QMessageBox.critical(None, "Error", "Sign up failed! Username may already exist.")
             return
