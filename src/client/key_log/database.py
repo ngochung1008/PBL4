@@ -1,12 +1,13 @@
 import mysql.connector
 from mysql.connector import Error
+from config.server_config import host_db, user_db, password_db, database_db
 
 def get_connection():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="085213",
-        database="pbl4"
+        host=host_db,
+        user=user_db,
+        password=password_db,
+        database=database_db
     )
 
 # 🟢 CREATE

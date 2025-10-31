@@ -1,7 +1,7 @@
 import socket
 import threading
 import struct
-import auth
+import src.server.auth as auth
 import subprocess
 import json
 from datetime import datetime
