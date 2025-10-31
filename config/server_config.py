@@ -1,2 +1,2 @@
-SERVER_IP = "localhost"
+SERVER_IP = "10.10.16.170"
 SERVER_HOST = 5000

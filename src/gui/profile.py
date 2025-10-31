@@ -174,7 +174,11 @@ class ProfileWindow(QWidget):
         self.refresh_user_data()
         
     def go_back(self):
-        self.close()
+        if (self.user.Role == "viewer"):
+            from src.gui.client_gui import ClientWindow
+            self.profile_window = ClientWindow(self.user, self.token)
+            self.profile_window.showMaximized()
+            self.close()
 
     def refresh_user_data(self):
         from src.model.Users import User

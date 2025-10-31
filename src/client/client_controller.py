@@ -23,7 +23,7 @@ class ClientController:
         self.last_client_x = -1
         self.last_client_y = -1
         self.username = username
-        self.key_logger = transfer_channel
+        self.transfer_channel = transfer_channel
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:

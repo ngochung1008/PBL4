@@ -125,14 +125,20 @@ class SignInWindow(QWidget):
         QMessageBox.information(None, "Success", f"Account created for {username}!")
         self.token = token 
         QApplication.instance().current_user = token
-        from src.gui.profile import ProfileWindow
         from src.model.Users import User
         data = client_profile(token)
         print(".. ", data)
         user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
-        self.profile_window = ProfileWindow(user, token)
-        self.profile_window.showMaximized()
-        self.close()
+        if (user.Role == "viewer"):
+            from src.gui.client_gui import ClientWindow
+            self.profile_window = ClientWindow(user, token)
+            self.profile_window.showMaximized()
+            self.close()
+        elif (user.Role == "user"):
+            from src.gui.profile import ProfileWindow
+            self.profile_window = ProfileWindow(user, token)
+            self.profile_window.showMaximized()
+            self.close()
 
     def sign_up(self):
         from src.gui.signup import SignUpWindow

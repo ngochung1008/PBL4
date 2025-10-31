@@ -15,13 +15,15 @@ def sign_in(username, password):
     conn = mysql.connector.connect(
         host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
         user="root",            # Tài khoản MySQL
-        password="@Hung1012",# Mật khẩu MySQL
+        password="085213",# Mật khẩu MySQL
         database="pbl4"       # Tên database muốn dùng
     )
+    print ("✅ Connected")
     query = "SELECT * FROM users WHERE Username = %s"
     cursor1 = conn.cursor()
     cursor1.execute(query, (username,))
     row = cursor1.fetchone()
+    print("Fetched user:", row)
     if row is None:
         cursor1.close()
         conn.close()
@@ -29,6 +31,7 @@ def sign_in(username, password):
     else:
         stored_hash = row[2]  # Giả sử PasswordHash là cột thứ 3
         cursor1.close()
+        print("Verifying password for user:", username)
         try:
             ph.verify(stored_hash, password)
             return True
@@ -42,7 +45,7 @@ def sign_up(username, password, fullname, email):
     conn = mysql.connector.connect(
         host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
         user="root",            # Tài khoản MySQL
-        password="@Hung1012",# Mật khẩu MySQL
+        password="085213",# Mật khẩu MySQL
         database="pbl4"       # Tên database muốn dùng
     )
     hashed = ph.hash(password)
@@ -65,7 +68,7 @@ def create_session(user_name, ip, mac_ip):
         conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="@Hung1012",
+            password="085213",
             database="pbl4"
         )
         cursor = conn.cursor()
@@ -109,7 +112,7 @@ def log_out(session_id):
         conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="root",
+            password="085213",
             database="pbl4"
         )
         cursor = conn.cursor()
@@ -154,7 +157,7 @@ def get_user_by_sessionid(sesion_id):
         conn = mysql.connector.connect(
             host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
             user="root",            # Tài khoản MySQL
-            password="root",# Mật khẩu MySQL
+            password="085213",# Mật khẩu MySQL
             database="pbl4"       # Tên database muốn dùng
         )
         print("✅ Connected to DB")
@@ -185,7 +188,7 @@ def get_user_by_id(user_id):
         conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="root",
+            password="085213",
             database="pbl4"
         )
         cursor = conn.cursor()
@@ -210,7 +213,7 @@ def get_user_by_sessionid(sesion_id):
         conn = mysql.connector.connect(
             host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
             user="root",            # Tài khoản MySQL
-            password="root",# Mật khẩu MySQL
+            password="085213",# Mật khẩu MySQL
             database="pbl4"       # Tên database muốn dùng
         )
         print("✅ Connected to DB")
@@ -242,7 +245,7 @@ def check_pasword(userid, password):
         conn = mysql.connector.connect(
             host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
             user="root",            # Tài khoản MySQL
-            password="root",# Mật khẩu MySQL
+            password="085213",# Mật khẩu MySQL
             database="pbl4"       # Tên database muốn dùng
         )
         print("✅ Connected to DB : ", password)
@@ -277,7 +280,7 @@ def edit_user(userid, fullname, email, new_password):
         conn = mysql.connector.connect(
             host="localhost",       # Địa chỉ server MySQL (vd: "127.0.0.1")
             user="root",            # Tài khoản MySQL
-            password="root",# Mật khẩu MySQL
+            password="085213",# Mật khẩu MySQL
             database="pbl4"       # Tên database muốn dùng
         )
         print("✅ Connected to DB")

@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from ui_components import (
+from src.gui.ui_components import (
     DARK_BG, create_back_button
 )
 
@@ -28,21 +28,22 @@ def get_local_ip():
 
 
 class ClientWindow(QWidget):
-    def __init__(self):
+    def __init__(self, user, token):
         super().__init__()
         self.setWindowTitle("Client Panel")
         self.resize(1000, 600)
         self.setStyleSheet(f"background-color: {DARK_BG}; color: {TEXT_LIGHT};")
+
+        self.user = user
+        self.token = token
+        self.is_editing = False
+
         self.init_ui()
 
     def init_ui(self):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
-
-        back_btn = create_back_button()
-        back_btn.clicked.connect(self.on_back)
-        outer_layout.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         center_layout = QVBoxLayout()
         center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -75,9 +76,32 @@ class ClientWindow(QWidget):
         """)
         user_btn.clicked.connect(self.on_profile)
 
+        log_btn = QPushButton("Logout")
+        log_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        log_btn.setFixedHeight(40)
+        log_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {SPOTIFY_GREEN};
+                color: {DARK_BG};
+                font-size: 14px;
+                border-radius: 8px;
+                border: 1px solid {SPOTIFY_GREEN};
+                padding: 4px 16px;
+                margin-left: 16px;
+                font-weight: bold;
+                margin-top: 16px;
+            }}
+            QPushButton:hover {{
+                background-color: #1ed760;
+            }}
+        """)
+
+        log_btn.clicked.connect(self.Logout)
+
         top_bar.addWidget(title)
         top_bar.addStretch()
         top_bar.addWidget(user_btn)
+        top_bar.addWidget(log_btn)
 
         ip_label = QLabel("Your IP:")
         ip_label.setStyleSheet("font-size: 11pt;")
@@ -144,22 +168,25 @@ class ClientWindow(QWidget):
         outer_layout.addLayout(center_layout)
         outer_layout.addStretch()
 
-        
 
     def copy_ip(self):
         QApplication.clipboard().setText(self.ip_field.text())
         QMessageBox.information(self, "Copied", "IP address copied to clipboard!")
 
     def on_profile(self):
-        import importlib
-        mod = importlib.import_module("profile")
-        ProfileWindow = getattr(mod, "ProfileWindow")
-        self.profile_window = ProfileWindow()
-        self.profile_window.show()
+        from src.gui.profile import ProfileWindow
+        self.profile_window = ProfileWindow(self.user, self.token)
+        self.profile_window.showMaximized()
         self.close()
 
-    def on_back(self):
-        QMessageBox.information(self, "Back", "Quay lại màn hình trước.")
+    def Logout(self):
+        from src.client.auth import client_logout
+        client_logout(self.token)
+        QApplication.instance().current_user = None
+        from src.gui.signin import SignInWindow
+        self.signin_window = SignInWindow()
+        self.signin_window.showMaximized()
+        self.close()
 
 
 def main():
