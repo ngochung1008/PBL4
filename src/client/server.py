@@ -177,3 +177,6 @@ class BrokerServer(object):
                 conn.close()
             except:
                 pass
+if __name__ == "__main__":
+    server = BrokerServer(host="0.0.0.0", port=33890)
+    server.start()
