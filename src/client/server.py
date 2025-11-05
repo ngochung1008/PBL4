@@ -1,41 +1,4 @@
-# # server.py
-
-# import socket
-# import threading
-# import struct
-# import io
-# import sys
-# import time
-# import json
-# import struct
-# from PIL import Image
-# from server_screen import ServerScreen  
-# import config
-# from remote_desktop_server import RemoteDesktopServer
-
-# if __name__ == "__main__":
-#     import signal
-
-#     # Khởi tạo Server
-#     server = RemoteDesktopServer(host="0.0.0.0") # Lắng nghe trên tất cả interfaces
-    
-#     def signal_handler(sig, frame):
-#         print('\n[SERVER] Shutdown signal received. Starting graceful shutdown.')
-#         server.close_all_connections() # Gọi phương thức đóng của lớp
-#         print('[SERVER] All connections closed. Exiting now.')
-#         sys.exit(0)
-
-#     # Bắt tín hiệu Ctrl+C (SIGINT)
-#     signal.signal(signal.SIGINT, signal_handler)
-    
-#     # Khởi động Server (bao gồm Control, Client, Transfer và Screen)
-#     server.run_server()
-    
-#     # GIỮ LUỒNG CHÍNH CHẠY: để bắt tín hiệu Ctrl+C
-#     while True:
-#         time.sleep(1) 
-
-# server.py
+# server.py (phần chính sửa)
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 import socket
@@ -45,7 +8,6 @@ import time
 
 TPKT_HEADER_FMT = ">BBH"
 
-# helper to read exact n bytes
 def recv_all(sock, n):
     data = b''
     while len(data) < n:
@@ -63,6 +25,7 @@ class BrokerServer(object):
         self.lock = threading.Lock()
         self.clients = {}      # client_id -> socket
         self.subscribers = {}  # client_id -> [sock, ...]
+        self.last_frame = {}   # client_id -> (hdr_bytes, payload_bytes)  <-- buffer last frame
 
     def start(self):
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -87,10 +50,9 @@ class BrokerServer(object):
     def handle_conn(self, conn, addr):
         print("[SERVER] Connection from", addr)
         try:
-            # read initial handshake (up to 128 bytes)
             conn.settimeout(5.0)
             try:
-                init = conn.recv(128)
+                init = conn.recv(256)
             except:
                 init = b''
             conn.settimeout(None)
@@ -103,22 +65,16 @@ class BrokerServer(object):
             except:
                 init_text = init.strip()
 
-            # CLIENT:<id>
             if init_text.startswith("CLIENT:"):
                 client_id = init_text.split(":",1)[1]
                 print("[SERVER] Registered client id:", client_id)
                 with self.lock:
                     self.clients[client_id] = conn
-                    if client_id not in self.subscribers:
-                        self.subscribers[client_id] = []
-                # handle receiving TPKT frames and forward to subscribers
+                    self.subscribers.setdefault(client_id, [])
                 self.handle_client_loop(client_id, conn)
-            # MANAGER then SUBSCRIBE:<id>
             elif init_text.startswith("MANAGER"):
-                # may have subscription on same buffer or wait for next message
-                # try to read next bytes for subscribe (short)
                 try:
-                    sub = conn.recv(128)
+                    sub = conn.recv(256)
                 except:
                     sub = b''
                 try:
@@ -130,7 +86,16 @@ class BrokerServer(object):
                     print("[SERVER] Manager subscribing to", target)
                     with self.lock:
                         self.subscribers.setdefault(target, []).append(conn)
-                    # keep manager connection open (do nothing else; frames will be forwarded)
+                    # If we have a buffered last frame for that client, send it immediately
+                    with self.lock:
+                        last = self.last_frame.get(target)
+                    if last:
+                        try:
+                            hdr_bytes, payload_bytes = last
+                            conn.sendall(hdr_bytes + payload_bytes)
+                            print("[SERVER] Sent buffered last frame to manager for", target)
+                        except Exception as e:
+                            print("[SERVER] Failed sending buffered frame:", e)
                     self.handle_manager_loop(conn, target)
                 else:
                     print("[SERVER] Manager connected but no subscribe. Closing.")
@@ -148,7 +113,6 @@ class BrokerServer(object):
     def handle_client_loop(self, client_id, conn):
         try:
             while True:
-                # read TPKT
                 hdr = recv_all(conn, 4)
                 ver, reserved, length = struct.unpack(TPKT_HEADER_FMT, hdr)
                 if ver != 0x03:
@@ -156,8 +120,12 @@ class BrokerServer(object):
                     break
                 payload_len = length - 4
                 payload = recv_all(conn, payload_len)
-                # optional: save locally or process
                 print("[SERVER] Received frame from {} ({} bytes)".format(client_id, payload_len))
+
+                # Store buffered last frame (hdr + payload)
+                with self.lock:
+                    self.last_frame[client_id] = (hdr, payload)
+
                 # forward to subscribers
                 with self.lock:
                     subs = list(self.subscribers.get(client_id, []))
@@ -181,14 +149,16 @@ class BrokerServer(object):
                     del self.clients[client_id]
                 except:
                     pass
-                # optionally notify subscribers
+                try:
+                    del self.last_frame[client_id]
+                except:
+                    pass
             try:
                 conn.close()
             except:
                 pass
 
     def handle_manager_loop(self, conn, client_id):
-        # just hold the connection open until closed by manager
         try:
             while True:
                 data = conn.recv(1)
@@ -207,7 +177,3 @@ class BrokerServer(object):
                 conn.close()
             except:
                 pass
-
-if __name__ == "__main__":
-    server = BrokerServer(host="0.0.0.0", port=33890)
-    server.start()

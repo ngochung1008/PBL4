@@ -150,7 +150,7 @@ if __name__ == "__main__":
     TARGET_CLIENT_ID = "client01"   # client you want to subscribe to
     OUT_DIR = "manager_saved"
 
-    mgr = ManagerScreenReceiver(SERVER_HOST, SERVER_PORT, TARGET_CLIENT_ID, out_dir=OUT_DIR)
+    mgr = ManagerScreenReceiver(server_host="10.10.58.163", server_port=33890, target_client_id="client01")
     try:
         mgr.run()
     except KeyboardInterrupt:
