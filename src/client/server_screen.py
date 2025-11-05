@@ -12,14 +12,14 @@ class ServerScreen:
         self.port = port
         self.is_running = True
 
-        # { Client_IP: [socket_conn, latest_frame_data] }
-        self.clients = {}  
-        self.clients_lock = threading.Lock()
-
         # { Manager_IP: [socket_conn, desired_client_ip] }
         # desired_client_ip: IP của Client mà Manager muốn xem
         self.managers = {}
         self.managers_lock = threading.Lock()
+
+        # { Client_IP: [socket_conn, latest_frame_data] }
+        self.clients = {}  
+        self.clients_lock = threading.Lock()
 
         # Danh sách kết nối đang hoạt động
         self.active_client_ips = []
