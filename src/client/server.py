@@ -1,10 +1,8 @@
-# server.py (phần chính sửa)
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 import socket
 import struct
 import threading
-import time
 
 TPKT_HEADER_FMT = ">BBH"
 
@@ -25,7 +23,7 @@ class BrokerServer(object):
         self.lock = threading.Lock()
         self.clients = {}      # client_id -> socket
         self.subscribers = {}  # client_id -> [sock, ...]
-        self.last_frame = {}   # client_id -> (hdr_bytes, payload_bytes)  <-- buffer last frame
+        self.last_frame = {}   # client_id -> (hdr_bytes, payload_bytes)
 
     def start(self):
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -72,6 +70,7 @@ class BrokerServer(object):
                     self.clients[client_id] = conn
                     self.subscribers.setdefault(client_id, [])
                 self.handle_client_loop(client_id, conn)
+
             elif init_text.startswith("MANAGER"):
                 try:
                     sub = conn.recv(256)
@@ -86,7 +85,7 @@ class BrokerServer(object):
                     print("[SERVER] Manager subscribing to", target)
                     with self.lock:
                         self.subscribers.setdefault(target, []).append(conn)
-                    # If we have a buffered last frame for that client, send it immediately
+                    # send last buffered frame if exists
                     with self.lock:
                         last = self.last_frame.get(target)
                     if last:
@@ -122,12 +121,8 @@ class BrokerServer(object):
                 payload = recv_all(conn, payload_len)
                 print("[SERVER] Received frame from {} ({} bytes)".format(client_id, payload_len))
 
-                # Store buffered last frame (hdr + payload)
                 with self.lock:
                     self.last_frame[client_id] = (hdr, payload)
-
-                # forward to subscribers
-                with self.lock:
                     subs = list(self.subscribers.get(client_id, []))
                 for s in subs:
                     try:
@@ -145,18 +140,12 @@ class BrokerServer(object):
             print("[SERVER] Error in client loop {}: {}".format(client_id, e))
         finally:
             with self.lock:
-                try:
-                    del self.clients[client_id]
-                except:
-                    pass
-                try:
-                    del self.last_frame[client_id]
-                except:
-                    pass
-            try:
-                conn.close()
-            except:
-                pass
+                try: del self.clients[client_id]
+                except: pass
+                try: del self.last_frame[client_id]
+                except: pass
+            try: conn.close()
+            except: pass
 
     def handle_manager_loop(self, conn, client_id):
         try:
@@ -169,14 +158,11 @@ class BrokerServer(object):
         finally:
             print("[SERVER] Manager disconnected for", client_id)
             with self.lock:
-                try:
-                    self.subscribers[client_id].remove(conn)
-                except:
-                    pass
-            try:
-                conn.close()
-            except:
-                pass
+                try: self.subscribers[client_id].remove(conn)
+                except: pass
+            try: conn.close()
+            except: pass
+
 if __name__ == "__main__":
     server = BrokerServer(host="0.0.0.0", port=33890)
     server.start()
