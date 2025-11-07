@@ -11,7 +11,7 @@ class ManagerInput:
 
     def __init__(self, conn, viewer=None):
         self.conn = conn # socket kết nối tới Server
-        """viewer: ManagerViewer: cho phép gọi hàm viewer.get_current_mapped_remote() để chuyển tọa độ chuột cục bộ thành tọa độ remote."""
+        """viewer: ManagerViewer: cho phép gọi hàm viewer.get_scale_ratio() để chuyển tọa độ chuột cục bộ thành tọa độ remote."""
         self.viewer = viewer # tham chiếu tới ManagerViewer (để lấy kích thước vùng hiển thị)"""
         """self._ignore: Cờ bảo vệ chống lại vòng lặp phản hồi (feedback loop). 
         Khi ManagerViewer tự động di chuyển con trỏ chuột cục bộ (sau khi nhận cập nhật con trỏ từ Client), 
@@ -57,7 +57,7 @@ class ManagerInput:
             return
         
         # 1. Lấy tọa độ remote tương ứng với vị trí con trỏ CỤC BỘ của Manager
-        mapped = self.viewer.get_current_mapped_remote()
+        mapped = self.viewer.get_scale_ratio()
         # Kiểm tra xem chuột có trong vùng hiển thị không
         if not mapped:
             if self.is_controlling:
@@ -95,7 +95,7 @@ class ManagerInput:
         if not self.viewer:
             return
         
-        mapped = self.viewer.get_current_mapped_remote()
+        mapped = self.viewer.get_scale_ratio()
         if not mapped:
             return
         
@@ -117,7 +117,7 @@ class ManagerInput:
         if not self.viewer:
             return
         
-        mapped = self.viewer.get_current_mapped_remote()
+        mapped = self.viewer.get_scale_ratio()
         if not mapped:
             return
 

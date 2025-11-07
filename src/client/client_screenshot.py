@@ -29,7 +29,7 @@ class ClientScreenshot:
         self.quality = quality
         self.max_dimension = max_dimension
         self.detect_delta = detect_delta
-
+        self._first_frame = True
         self._prev_image = None
         self.stop = False
 
@@ -77,34 +77,51 @@ class ClientScreenshot:
     def capture_loop(self, callback):
         """
         callback(width, height, jpg_bytes, bbox, pil_image)
-        Nếu bbox != None => vùng khác biệt (left, upper, right, lower)
+        - Gửi full frame đầu tiên
+        - Các frame sau chỉ gửi delta (nếu có khác biệt)
+        - Tự điều chỉnh FPS
         """
         interval = 1.0 / self.fps
+        self._first_frame = True
+        self._prev_image = None
+
         while not self.stop:
-            start = time.time()
+            start_time = time.perf_counter()
+
             img = self.capture_once()
-            bbox = self.compute_delta_bbox(img)
-            if bbox is None:
-                time.sleep(interval)
+
+            # Frame đầu tiên luôn gửi full
+            bbox = None
+            if not self._first_frame and self.detect_delta:
+                bbox = self.compute_delta_bbox(img)
+            else:
+                self._first_frame = False
+
+            # Nếu không có thay đổi thì bỏ qua
+            if bbox is None and not self._first_frame:
+                elapsed = time.perf_counter() - start_time
+                sleep_time = max(0, interval - elapsed)
+                time.sleep(sleep_time)
                 continue
-            # jpg_bytes = self._encode_jpeg(img)
+
+            # Encode ảnh (full hoặc delta)
             if bbox:
                 region = img.crop(bbox)
                 jpg_bytes = self._encode_jpeg(region)
             else:
                 jpg_bytes = self._encode_jpeg(img)
-            width, height = img.size
 
-            # cập nhật prev image
-            # self._prev_image = img.copy()
+            width, height = img.size
+            # Cập nhật ảnh trước (dạng grayscale)
             self._prev_image = img.convert("L")
 
-            # gọi callback để gửi
+            # Gọi callback để enqueue
             try:
                 callback(width, height, jpg_bytes, bbox, img)
             except Exception as e:
                 print("[CLIENT SCREENSHOT] Callback error:", e)
 
-            elapsed = time.perf_counter() - start
-            to_sleep = max(0, interval - elapsed)
-            time.sleep(to_sleep)
+            # Duy trì FPS
+            elapsed = time.perf_counter() - start_time
+            sleep_time = max(0, interval - elapsed)
+            time.sleep(sleep_time)
