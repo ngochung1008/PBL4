@@ -1,8 +1,9 @@
-from __future__ import print_function
+# manager.py
+# -*- coding: utf-8 -*-
 from manager_screen import ManagerScreenReceiver
 
 if __name__ == "__main__":
-    SERVER_HOST = "10.10.58.163"
+    SERVER_HOST = "10.10.58.163"   # đổi theo server của bạn
     SERVER_PORT = 33890
     TARGET_CLIENT_ID = "client01"
 

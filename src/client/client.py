@@ -1,13 +1,13 @@
 # client.py
 # -*- coding: utf-8 -*-
 from client_screenshot import ClientScreenshot
-from client_network import ClientScreenSenderAdvanced
+from client_screen_sender import ClientScreenSender
 import threading
 import signal
 import sys
 
 def main():
-    SERVER_HOST = "10.10.58.163"
+    SERVER_HOST = "10.10.30.88"
     SERVER_PORT = 33890
     CLIENT_ID = "client01"
 
@@ -19,8 +19,10 @@ def main():
     rect_threshold_area = 20000  # px^2
 
     capturer = ClientScreenshot(fps=fps, quality=quality, max_dimension=max_dimension, detect_delta=True)
-    sender = ClientScreenSenderAdvanced(SERVER_HOST, SERVER_PORT, CLIENT_ID, use_encryption=use_encryption,
-                                       rect_threshold_area=rect_threshold_area)
+    sender = ClientScreenSender(SERVER_HOST, SERVER_PORT, CLIENT_ID,
+                            use_encryption=use_encryption,
+                            rect_threshold_area=rect_threshold_area)
+
 
     # start sender thread
     t_sender = threading.Thread(target=sender.send_loop, daemon=True)

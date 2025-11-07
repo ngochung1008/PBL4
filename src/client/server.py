@@ -1,168 +1,135 @@
-# -*- coding: utf-8 -*-
-from __future__ import print_function
+# File: server.py
+"""
+Server: accepts client screen sender connections and manager viewer connections.
+- Listens on two ports (can be same port but we use same as client target port for clients and manager_port for managers)
+- Performs simple X224-style handshake
+- Parses TPKT frames and PDU payloads and forwards frames from clients to all connected managers
+"""
 import socket
-import struct
 import threading
+import time
+from server_network.x224_handshake import X224Handshake
+from server_network.tpkt_layer import TPKTLayer
+from server_network.pdu_parser import PDUParser
 
-TPKT_HEADER_FMT = ">BBH"
+CLIENT_LISTEN_PORT = 33890
+MANAGER_LISTEN_PORT = 33900
 
-def recv_all(sock, n):
-    data = b''
-    while len(data) < n:
-        chunk = sock.recv(n - len(data))
-        if not chunk:
-            raise ConnectionError("Socket closed")
-        data += chunk
-    return data
+managers = set()
+managers_lock = threading.Lock()
 
-class BrokerServer(object):
-    def __init__(self, host="0.0.0.0", port=33890):
+
+def broadcast_to_managers(tpkt_bytes):
+    with managers_lock:
+        for m in list(managers):
+            try:
+                m.sendall(tpkt_bytes)
+            except Exception:
+                try:
+                    m.close()
+                except Exception:
+                    pass
+                managers.remove(m)
+
+
+class ClientHandler(threading.Thread):
+    def __init__(self, conn, addr):
+        super().__init__(daemon=True)
+        self.conn = conn
+        self.addr = addr
+        self.client_id = None
+        self.parser = PDUParser()
+
+    def run(self):
+        try:
+            # handshake (read CONNECT and respond)
+            if not X224Handshake.server_do_handshake(self.conn):
+                print(f"[SERVER] Handshake failed for {self.addr}")
+                self.conn.close()
+                return
+            # after handshake, continuously receive tpkt frames and forward to managers
+            while True:
+                hdr = self.conn.recv(4)
+                if not hdr:
+                    break
+                ver, rsv, length = PTP = TPKTLayer.unpack_header(hdr)
+                body = b""
+                need = length - 4
+                while need > 0:
+                    chunk = self.conn.recv(need)
+                    if not chunk:
+                        raise ConnectionError("socket closed while receiving body")
+                    body += chunk
+                    need -= len(chunk)
+                full_tpkt = hdr + body
+                # optionally parse for logging
+                try:
+                    pdu = self.parser.parse_pdu(body)
+                    if pdu['type'] == 'control':
+                        print(f"[SERVER] Control from client: {pdu.get('message')}")
+                    elif pdu['type'] in ('full', 'rect'):
+                        print(f"[SERVER] Frame from client: type={pdu['type']} size={len(body)}")
+                except Exception:
+                    pass
+                # forward raw tpkt to managers
+                broadcast_to_managers(full_tpkt)
+        except Exception as e:
+            print(f"[SERVER] client handler error: {e}")
+        finally:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+            print(f"[SERVER] client disconnected {self.addr}")
+
+
+class ManagerAcceptor(threading.Thread):
+    def __init__(self, host='', port=MANAGER_LISTEN_PORT):
+        super().__init__(daemon=True)
         self.host = host
         self.port = port
-        self.server_sock = None
-        self.lock = threading.Lock()
-        self.clients = {}      # client_id -> socket
-        self.subscribers = {}  # client_id -> [sock, ...]
-        self.last_frame = {}   # client_id -> (hdr_bytes, payload_bytes)
 
-    def start(self):
-        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_sock.bind((self.host, self.port))
-        self.server_sock.listen(64)
-        print("[SERVER] Listening on {}:{}".format(self.host, self.port))
-        try:
-            while True:
-                conn, addr = self.server_sock.accept()
-                t = threading.Thread(target=self.handle_conn, args=(conn, addr))
-                t.daemon = True
-                t.start()
-        except KeyboardInterrupt:
-            print("\n[SERVER] Shutting down.")
-        finally:
+    def run(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.host, self.port))
+        sock.listen(5)
+        print(f"[SERVER] Manager acceptor listening on {self.host}:{self.port}")
+        while True:
+            conn, addr = sock.accept()
+            print(f"[SERVER] Manager connected {addr}")
+            # perform handshake (manager should do same CONNECT)
             try:
-                self.server_sock.close()
-            except:
-                pass
-
-    def handle_conn(self, conn, addr):
-        print("[SERVER] Connection from", addr)
-        try:
-            conn.settimeout(5.0)
-            try:
-                init = conn.recv(256)
-            except:
-                init = b''
-            conn.settimeout(None)
-            if not init:
-                print("[SERVER] No handshake, closing", addr)
-                conn.close()
-                return
-            try:
-                init_text = init.decode('utf-8', errors='ignore').strip()
-            except:
-                init_text = init.strip()
-
-            if init_text.startswith("CLIENT:"):
-                client_id = init_text.split(":",1)[1]
-                print("[SERVER] Registered client id:", client_id)
-                with self.lock:
-                    self.clients[client_id] = conn
-                    self.subscribers.setdefault(client_id, [])
-                self.handle_client_loop(client_id, conn)
-
-            elif init_text.startswith("MANAGER"):
-                try:
-                    sub = conn.recv(256)
-                except:
-                    sub = b''
-                try:
-                    sub_text = sub.decode('utf-8', errors='ignore').strip()
-                except:
-                    sub_text = sub.strip()
-                if sub_text.startswith("SUBSCRIBE:"):
-                    target = sub_text.split(":",1)[1]
-                    print("[SERVER] Manager subscribing to", target)
-                    with self.lock:
-                        self.subscribers.setdefault(target, []).append(conn)
-                    # send last buffered frame if exists
-                    with self.lock:
-                        last = self.last_frame.get(target)
-                    if last:
-                        try:
-                            hdr_bytes, payload_bytes = last
-                            conn.sendall(hdr_bytes + payload_bytes)
-                            print("[SERVER] Sent buffered last frame to manager for", target)
-                        except Exception as e:
-                            print("[SERVER] Failed sending buffered frame:", e)
-                    self.handle_manager_loop(conn, target)
-                else:
-                    print("[SERVER] Manager connected but no subscribe. Closing.")
+                if not X224Handshake.server_do_handshake(conn):
                     conn.close()
-            else:
-                print("[SERVER] Unknown handshake:", init_text[:80])
+                    continue
+            except Exception:
                 conn.close()
-        except Exception as e:
-            print("[SERVER] Conn handler error:", e)
-            try:
-                conn.close()
-            except:
-                pass
+                continue
+            with managers_lock:
+                managers.add(conn)
 
-    def handle_client_loop(self, client_id, conn):
-        try:
-            while True:
-                hdr = recv_all(conn, 4)
-                ver, reserved, length = struct.unpack(TPKT_HEADER_FMT, hdr)
-                if ver != 0x03:
-                    print("[SERVER] Bad TPKT ver from", client_id)
-                    break
-                payload_len = length - 4
-                payload = recv_all(conn, payload_len)
-                print("[SERVER] Received frame from {} ({} bytes)".format(client_id, payload_len))
 
-                with self.lock:
-                    self.last_frame[client_id] = (hdr, payload)
-                    subs = list(self.subscribers.get(client_id, []))
-                for s in subs:
-                    try:
-                        s.sendall(hdr + payload)
-                    except Exception as e:
-                        print("[SERVER] Forward to manager failed, removing subscriber:", e)
-                        with self.lock:
-                            try:
-                                self.subscribers[client_id].remove(s)
-                            except:
-                                pass
-        except ConnectionError:
-            print("[SERVER] Client {} disconnected".format(client_id))
-        except Exception as e:
-            print("[SERVER] Error in client loop {}: {}".format(client_id, e))
-        finally:
-            with self.lock:
-                try: del self.clients[client_id]
-                except: pass
-                try: del self.last_frame[client_id]
-                except: pass
-            try: conn.close()
-            except: pass
+def start_server(host='', client_port=CLIENT_LISTEN_PORT, manager_port=MANAGER_LISTEN_PORT):
+    # start manager acceptor
+    ManagerAcceptor(host, manager_port).start()
 
-    def handle_manager_loop(self, conn, client_id):
-        try:
-            while True:
-                data = conn.recv(1)
-                if not data:
-                    break
-        except:
-            pass
-        finally:
-            print("[SERVER] Manager disconnected for", client_id)
-            with self.lock:
-                try: self.subscribers[client_id].remove(conn)
-                except: pass
-            try: conn.close()
-            except: pass
+    # accept clients
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((host, client_port))
+    sock.listen(10)
+    print(f"[SERVER] Client listener on {host}:{client_port}")
+    try:
+        while True:
+            conn, addr = sock.accept()
+            print(f"[SERVER] Client connected {addr}")
+            ClientHandler(conn, addr).start()
+    except KeyboardInterrupt:
+        print("[SERVER] shutting down")
+    finally:
+        sock.close()
 
-if __name__ == "__main__":
-    server = BrokerServer(host="0.0.0.0", port=33890)
-    server.start()
+
+if __name__ == '__main__':
+    start_server()

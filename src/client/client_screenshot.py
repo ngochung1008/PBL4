@@ -1,5 +1,5 @@
 # client_screenshot.py
-# -*- coding: utf-8 -*-
+
 """
 ClientScreenshot
 - Chụp màn hình (mss)
@@ -28,10 +28,12 @@ class ClientScreenshot:
         self.fps = fps
         self.quality = quality
         self.max_dimension = max_dimension
-        self.stop = False
         self.detect_delta = detect_delta
-        self._prev_image = None
 
+        self._prev_image = None
+        self.stop = False
+
+    # Hàm resize nếu màn hình lớn
     def _resize_if_needed(self, img):
         w, h = img.size
         long_edge = max(w, h)
@@ -42,32 +44,36 @@ class ClientScreenshot:
             img = img.resize((new_w, new_h), RESAMPLE_MODE)
         return img
 
+    # Hàm mã hóa JPEG 
     def _encode_jpeg(self, img):
         bio = io.BytesIO()
         img.save(bio, format="JPEG", quality=self.quality)
         return bio.getvalue()
 
+    # Hàm chụp ảnh 1 lần 
     def capture_once(self):
         with mss() as sct:
             monitor = sct.monitors[0]
-            sct_img = sct.grab(monitor)
+            sct_img = sct.grab(monitor) # lấy raw pixel data
             img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-            img = self._resize_if_needed(img)
+            img = self._resize_if_needed(img) # nén ảnh 
             return img
 
+    # phát hiện vùng thay đổi giữa 2 frame 
     def compute_delta_bbox(self, img):
-        """
-        Trả về bbox (left, upper, right, lower) nếu có sự khác biệt so với frame trước,
-        hoặc None nếu không khác biệt (hoặc detect_delta=False).
-        """
+        """ Trả về bbox (left, upper, right, lower) nếu có sự khác biệt so với frame trước,
+        hoặc None nếu không khác biệt (hoặc detect_delta=False). """
         if not self.detect_delta:
             return None
         if self._prev_image is None:
+            self._prev_image = img.convert("L")
             return None
-        diff = ImageChops.difference(img, self._prev_image)
+        # diff = ImageChops.difference(img, self._prev_image) # so sánh với ảnh trước
+        diff = ImageChops.difference(img.convert("L"), self._prev_image)
         bbox = diff.getbbox()  # nếu bbox is None => không khác biệt
         return bbox
 
+    # vòng lặp liên tục 
     def capture_loop(self, callback):
         """
         callback(width, height, jpg_bytes, bbox, pil_image)
@@ -78,19 +84,27 @@ class ClientScreenshot:
             start = time.time()
             img = self.capture_once()
             bbox = self.compute_delta_bbox(img)
-            jpg_bytes = self._encode_jpeg(img)
+            if bbox is None:
+                time.sleep(interval)
+                continue
+            # jpg_bytes = self._encode_jpeg(img)
+            if bbox:
+                region = img.crop(bbox)
+                jpg_bytes = self._encode_jpeg(region)
+            else:
+                jpg_bytes = self._encode_jpeg(img)
             width, height = img.size
 
-            # cập nhật prev image (keep a copy in RGB mode)
-            self._prev_image = img.copy()
+            # cập nhật prev image
+            # self._prev_image = img.copy()
+            self._prev_image = img.convert("L")
 
             # gọi callback để gửi
             try:
                 callback(width, height, jpg_bytes, bbox, img)
             except Exception as e:
-                # không muốn dừng capture do lỗi ở phía sender
-                print("[CAPTURER] Callback error:", e)
+                print("[CLIENT SCREENSHOT] Callback error:", e)
 
-            elapsed = time.time() - start
+            elapsed = time.perf_counter() - start
             to_sleep = max(0, interval - elapsed)
             time.sleep(to_sleep)
