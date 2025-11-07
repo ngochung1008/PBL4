@@ -1,93 +1,128 @@
 # manager_viewer.py
-import socket, threading, io
+import io
+import threading
+import socket
+import struct
+import time
 from PIL import Image, ImageTk
 import tkinter as tk
-from common_network.x224_handshake import X224Handshake
-from common_network.tpkt_layer import TPKTLayer
-from common_network.pdu_parser import PDUParser
+
+from client_network.tpkt_layer import TPKTLayer
+from client_network.pdu_builder import PDU_TYPE_FULL, PDU_TYPE_RECT
+
 
 class ManagerViewer:
-    def __init__(self, host, port, manager_id="manager1", on_click=None):
-        self.host = host
-        self.port = port
-        self.manager_id = manager_id
-        self.sock = None
-        self.parser = PDUParser()
+    def __init__(self, server_host, server_port, window_title="Remote Viewer"):
+        self.server_host = server_host
+        self.server_port = server_port
+        self.window_title = window_title
+
         self.root = tk.Tk()
-        self.root.title(f"Manager Viewer - {manager_id}")
+        self.root.title(self.window_title)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
         self.canvas = tk.Canvas(self.root, bg="black")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-        self.photo = None
-        self.full_size = (0,0)  # last full frame size
-        self.on_click = on_click   # callback(x,y,event)
-        # bind mouse events for input capture
-        self.canvas.bind("<Button-1>", self._on_click)
-        self.canvas.bind("<Motion>", self._on_motion)
-        self.canvas.bind("<ButtonPress>", self._on_button)
-        self.canvas.bind("<ButtonRelease>", self._on_button_release)
-        self._mouse_pos = (0,0)
+        self.canvas.pack(fill="both", expand=True)
 
-    def connect(self):
-        self.sock = socket.create_connection((self.host, self.port), timeout=10)
-        X224Handshake.client_send_connect(self.sock, self.manager_id)
-        threading.Thread(target=self._recv_loop, daemon=True).start()
+        self.sock = None
+        self.stop_event = threading.Event()
+        self.thread = threading.Thread(target=self._recv_loop, daemon=True)
 
-    def _recv_loop(self):
-        try:
-            while True:
-                hdr = X224Handshake.recv_all(self.sock, 4)
-                ver, rsv, length = TPKTLayer.unpack_header(hdr)
-                body = X224Handshake.recv_all(self.sock, length - 4)
-                pdu = self.parser.parse(body)
-                if pdu["type"] == "full":
-                    jpg = pdu["jpg"]
-                    img = Image.open(io.BytesIO(jpg)).convert("RGB")
-                    self.full_size = (pdu["width"], pdu["height"])
-                    self._display_image(img)
-                elif pdu["type"] == "rect":
-                    jpg = pdu["jpg"]
-                    img = Image.open(io.BytesIO(jpg)).convert("RGB")
-                    # For simplicity we display rect alone.
-                    # Advanced: composite into a backing full image.
-                    self._display_image(img)
-        except Exception as e:
-            print("[VIEWER] recv loop stopped:", e)
+        # Biến chứa frame hiện tại
+        self.image = None
+        self.tk_img = None
 
-    def _display_image(self, pil_img):
-        # resize to fit canvas while maintaining aspect
-        w, h = pil_img.size
-        # perform UI update in main thread
-        def _update():
-            cw = self.canvas.winfo_width() or 800
-            ch = self.canvas.winfo_height() or 600
-            ratio = min(cw / w, ch / h, 1.0)
-            nw = int(w * ratio)
-            nh = int(h * ratio)
-            img = pil_img.resize((nw, nh))
-            self.photo = ImageTk.PhotoImage(img)
-            self.canvas.delete("all")
-            self.canvas.create_image((0,0), anchor="nw", image=self.photo)
-        self.canvas.after(0, _update)
+        # Scale hiển thị (tự tính sau khi nhận full frame)
+        self.display_scale = 1.0
+        self.display_size = None
 
-    def start_mainloop(self):
+        # Thông tin kích thước thật
+        self.remote_width = None
+        self.remote_height = None
+
+    def start(self):
+        self.thread.start()
         self.root.mainloop()
 
-    # mouse events -> call on_click handler with canvas coordinates
-    def _on_click(self, event):
-        x, y = event.x, event.y
-        if self.on_click:
-            self.on_click("click", x, y, event)
+    def _on_close(self):
+        self.stop_event.set()
+        if self.sock:
+            self.sock.close()
+        self.root.destroy()
 
-    def _on_motion(self, event):
-        x, y = event.x, event.y
-        self._mouse_pos = (x,y)
-        if self.on_click:
-            self.on_click("move", x, y, event)
+    # Nhận luồng dữ liệu ảnh từ server
+    def _recv_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                print(f"[MANAGER] Connecting to {self.server_host}:{self.server_port} ...")
+                self.sock = socket.create_connection((self.server_host, self.server_port), timeout=10)
 
-    def _on_button(self, event):
-        if self.on_click:
-            self.on_click("down", event.x, event.y, event)
+                while not self.stop_event.is_set():
+                    header = self._recv_exact(4)
+                    if not header:
+                        break
+                    ver, rsv, total_len = struct.unpack(">BBH", header)
+                    body = self._recv_exact(total_len - 4)
+                    if not body:
+                        break
+                    self._handle_pdu(body)
+            except Exception as e:
+                print("[MANAGER] network error:", e)
+                time.sleep(3)
 
-    def _on_button_release(self, event):
-        if self.on_click:
-            self.on_click("up", event.x, event.y, event)
+    def _recv_exact(self, n):
+        data = bytearray()
+        while len(data) < n:
+            chunk = self.sock.recv(n - len(data))
+            if not chunk:
+                return None
+            data.extend(chunk)
+        return bytes(data)
+
+    # Xử lý frame nhận được
+    def _handle_pdu(self, data):
+        seq, ts_ms, pdu_type, flags = struct.unpack(">IQBB", data[:14])
+        payload = data[14:]
+
+        if pdu_type == PDU_TYPE_FULL:
+            width, height, jpg_len = struct.unpack(">III", payload[:12])
+            jpg_data = payload[12:12 + jpg_len]
+            self._update_frame("full", jpg_data, width, height)
+
+        elif pdu_type == PDU_TYPE_RECT:
+            x, y, w, h, jpg_len = struct.unpack(">IIIII", payload[:20])
+            full_w, full_h = struct.unpack(">II", payload[20:28])
+            jpg_data = payload[28:28 + jpg_len]
+            self._update_frame("rect", jpg_data, full_w, full_h, x, y)
+
+    # Cập nhật canvas
+    def _update_frame(self, frame_type, jpg_bytes, full_w, full_h, x=0, y=0):
+        patch = Image.open(io.BytesIO(jpg_bytes))
+
+        if frame_type == "full" or self.image is None:
+            self.image = patch
+            self.remote_width, self.remote_height = full_w, full_h
+
+            # Tính tỉ lệ hiển thị để fit cửa sổ
+            screen_w = self.root.winfo_screenwidth()
+            screen_h = self.root.winfo_screenheight()
+            scale = min(screen_w / full_w, screen_h / full_h)
+            self.display_scale = scale
+            self.display_size = (int(full_w * scale), int(full_h * scale))
+            self.canvas.config(width=self.display_size[0], height=self.display_size[1])
+        else:
+            # Ghép vùng delta vào frame hiện có
+            self.image.paste(patch, (x, y))
+
+        # Resize để hiển thị
+        display_img = self.image.resize(self.display_size)
+        self.tk_img = ImageTk.PhotoImage(display_img)
+        self.canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
+        self.canvas.image = self.tk_img
+
+    # Lấy tỷ lệ hiển thị để tính ngược toạ độ
+    def get_scale_ratio(self):
+        """Tỷ lệ từ màn hình hiển thị → màn hình gốc client"""
+        if not self.remote_width or not self.remote_height:
+            return 1.0
+        return self.remote_width / self.display_size[0]
