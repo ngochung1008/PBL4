@@ -4,7 +4,7 @@ from client_sender import ClientScreenSender
 import threading, signal, sys
 
 def main():
-    SERVER_HOST = "10.10.30.88"
+    SERVER_HOST = "10.227.28.77"
     SERVER_PORT = 33890
     CLIENT_ID = "client01"
 
