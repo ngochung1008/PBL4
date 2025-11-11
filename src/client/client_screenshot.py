@@ -1,5 +1,6 @@
 # client_screenshot.py
 
+"file dùng"
 """
 ClientScreenshot
 - Chụp màn hình (mss)
@@ -16,6 +17,7 @@ from mss import mss
 from PIL import Image, ImageChops
 import io
 import time
+import threading
 
 try:
     RESAMPLE_MODE = Image.Resampling.LANCZOS
@@ -29,9 +31,13 @@ class ClientScreenshot:
         self.quality = quality
         self.max_dimension = max_dimension
         self.detect_delta = detect_delta
+
         self._first_frame = True
         self._prev_image = None
+        self._force_full = False
         self.stop = False
+        self.frame_seq = 0               
+        self._lock = threading.Lock()
 
     # Hàm resize nếu màn hình lớn
     def _resize_if_needed(self, img):
@@ -72,11 +78,17 @@ class ClientScreenshot:
         diff = ImageChops.difference(img.convert("L"), self._prev_image)
         bbox = diff.getbbox()  # nếu bbox is None => không khác biệt
         return bbox
+    
+    # ép gửi lại full frame
+    def force_full_frame(self):
+        # buộc frame tiếp theo gửi toàn màn hình
+        with self._lock:
+            self._force_full = True
 
     # vòng lặp liên tục 
     def capture_loop(self, callback):
         """
-        callback(width, height, jpg_bytes, bbox, pil_image)
+        callback(width, height, jpg_bytes, bbox, pil_image, frame_seq, ts_ms)
         - Gửi full frame đầu tiên
         - Các frame sau chỉ gửi delta (nếu có khác biệt)
         - Tự điều chỉnh FPS
@@ -92,6 +104,10 @@ class ClientScreenshot:
 
             # Frame đầu tiên luôn gửi full
             bbox = None
+            with self._lock:
+                if self._force_full:
+                    bbox = None
+                    self._force_full = False
             if not self._first_frame and self.detect_delta:
                 bbox = self.compute_delta_bbox(img)
             else:
@@ -112,12 +128,14 @@ class ClientScreenshot:
                 jpg_bytes = self._encode_jpeg(img)
 
             width, height = img.size
+            ts_ms = int(time.time() * 1000)  
+            seq = self.frame_seq
             # Cập nhật ảnh trước (dạng grayscale)
             self._prev_image = img.convert("L")
 
             # Gọi callback để enqueue
             try:
-                callback(width, height, jpg_bytes, bbox, img)
+                callback(width, height, jpg_bytes, bbox, img, seq, ts_ms)
             except Exception as e:
                 print("[CLIENT SCREENSHOT] Callback error:", e)
 

@@ -5,7 +5,9 @@ TPKT_HEADER_FMT = ">BBH"
 CONNECT_MAGIC = b"X224_CONNECT_V1"
 CONFIRM_MAGIC = b"X224_CONFIRM_V1"
 
+# Lớp X224 xác nhận kết nối giữa manager/client với server 
 class X224Handshake:
+    # đảm bảo đọc đủ số byte yêu cầu từ socket 
     @staticmethod
     def recv_all(sock, n):
         data = bytearray()
@@ -16,6 +18,7 @@ class X224Handshake:
             data.extend(chunk)
         return bytes(data)
 
+    # client gửi gói CONNECT request và chờ phản hồi từ server
     @staticmethod
     def client_send_connect(sock, client_id: str, timeout=10):
         body = CONNECT_MAGIC + b":" + client_id.encode()
@@ -28,6 +31,7 @@ class X224Handshake:
         body = X224Handshake.recv_all(sock, length - 4)
         return body
 
+    # server đọc gói connect và trả phản hồi cho client
     @staticmethod
     def server_do_handshake(sock, timeout=10):
         sock.settimeout(timeout)

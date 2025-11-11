@@ -1,31 +1,43 @@
-# client.py
+import threading
+from client_network import ClientNetwork
+from client_sender import ClientSender
+from client_input_handler import ClientInputHandler
 from client_screenshot import ClientScreenshot
-from client_sender import ClientScreenSender
-import threading, signal, sys
 
-def main():
-    SERVER_HOST = "10.10.30.88"
-    SERVER_PORT = 33890
-    CLIENT_ID = "client01"
+class ClientApp:
+    """Quản lý toàn bộ client: chụp màn hình, gửi frame, nhận input"""
+    def __init__(self, server_host="127.0.0.1", server_port=8443, client_id="client_01"):
+        self.network = ClientNetwork(server_host, server_port, client_id)
+        self.sender = ClientSender(self.network)
+        self.screenshot = ClientScreenshot(fps=2, quality=75, max_dimension=1280)
+        self.input_handler = ClientInputHandler(self.network)
+        self.running = True
 
-    capturer = ClientScreenshot(fps=2, quality=75, max_dimension=1280, detect_delta=True)
-    sender = ClientScreenSender(SERVER_HOST, SERVER_PORT, CLIENT_ID, rect_threshold_area=20000)
-    sender.start()
+    def start(self):
+        print("[CLIENT] Connecting to server...")
+        self.network.connect()
 
-    def shutdown(signum, frame):
-        print("[MAIN] shutting down")
-        capturer.stop = True
-        sender.stop()
-        sys.exit(0)
+        # Bắt đầu luồng nhận input từ server
+        t_input = threading.Thread(target=self.input_handler.handle_loop, daemon=True)
+        t_input.start()
 
-    import signal
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
+        # Callback nhận ảnh chụp từ ClientScreenshot
+        def on_capture(width, height, jpg_bytes, bbox, pil_img, seq, ts_ms):
+            # Gửi frame kèm seq và timestamp
+            self.sender.send_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
 
-    try:
-        capturer.capture_loop(sender.enqueue_frame)
-    except KeyboardInterrupt:
-        shutdown(None, None)
+        print("[CLIENT] Starting capture loop...")
+        self.screenshot.capture_loop(on_capture)
+
+    def stop(self):
+        self.screenshot.stop = True
+        self.input_handler.running = False
+        self.network.close()
 
 if __name__ == "__main__":
-    main()
+    app = ClientApp()
+    try:
+        app.start()
+    except KeyboardInterrupt:
+        app.stop()
+        print("\n[CLIENT] Stopped.")

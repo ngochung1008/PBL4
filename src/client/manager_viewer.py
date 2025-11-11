@@ -1,15 +1,26 @@
 # manager_viewer.py
 import io
-import threading
 import socket
 import struct
+import threading
 import time
 from PIL import Image, ImageTk
 import tkinter as tk
 
-from client_network.tpkt_layer import TPKTLayer
-from client_network.pdu_builder import PDU_TYPE_FULL, PDU_TYPE_RECT
+PDU_TYPE_FULL = 1
+PDU_TYPE_RECT = 2
 
+TPKT_HEADER_FMT = ">BBH"
+SHARE_CTRL_HDR_FMT = ">IQBB"  # seq, timestamp, pdu_type, flags
+
+def recv_all(sock, n):
+    data = b""
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            raise ConnectionError("Socket closed")
+        data += chunk
+    return data
 
 class ManagerViewer:
     def __init__(self, server_host, server_port, window_title="Remote Viewer"):
@@ -18,9 +29,8 @@ class ManagerViewer:
         self.window_title = window_title
 
         self.root = tk.Tk()
-        self.root.title(self.window_title)
+        self.root.title(window_title)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-
         self.canvas = tk.Canvas(self.root, bg="black")
         self.canvas.pack(fill="both", expand=True)
 
@@ -28,15 +38,10 @@ class ManagerViewer:
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self._recv_loop, daemon=True)
 
-        # Biến chứa frame hiện tại
         self.image = None
         self.tk_img = None
 
-        # Scale hiển thị (tự tính sau khi nhận full frame)
-        self.display_scale = 1.0
         self.display_size = None
-
-        # Thông tin kích thước thật
         self.remote_width = None
         self.remote_height = None
 
@@ -50,79 +55,66 @@ class ManagerViewer:
             self.sock.close()
         self.root.destroy()
 
-    # Nhận luồng dữ liệu ảnh từ server
     def _recv_loop(self):
         while not self.stop_event.is_set():
             try:
-                print(f"[MANAGER] Connecting to {self.server_host}:{self.server_port} ...")
+                print(f"[VIEWER] Connecting to {self.server_host}:{self.server_port}")
                 self.sock = socket.create_connection((self.server_host, self.server_port), timeout=10)
+                self.sock.sendall(b"MANAGER\n")  # handshake
 
                 while not self.stop_event.is_set():
-                    header = self._recv_exact(4)
-                    if not header:
-                        break
-                    ver, rsv, total_len = struct.unpack(">BBH", header)
-                    body = self._recv_exact(total_len - 4)
-                    if not body:
-                        break
+                    header = recv_all(self.sock, 4)
+                    ver, rsv, total_len = struct.unpack(TPKT_HEADER_FMT, header)
+                    body = recv_all(self.sock, total_len - 4)
                     self._handle_pdu(body)
             except Exception as e:
-                print("[MANAGER] network error:", e)
+                print("[VIEWER] Network error:", e)
                 time.sleep(3)
 
-    def _recv_exact(self, n):
-        data = bytearray()
-        while len(data) < n:
-            chunk = self.sock.recv(n - len(data))
-            if not chunk:
-                return None
-            data.extend(chunk)
-        return bytes(data)
-
-    # Xử lý frame nhận được
     def _handle_pdu(self, data):
-        seq, ts_ms, pdu_type, flags = struct.unpack(">IQBB", data[:14])
+        if len(data) < struct.calcsize(SHARE_CTRL_HDR_FMT):
+            return
+        seq, ts_ms, pdu_type, flags = struct.unpack(SHARE_CTRL_HDR_FMT, data[:14])
         payload = data[14:]
 
         if pdu_type == PDU_TYPE_FULL:
+            if len(payload) < 12:
+                return
             width, height, jpg_len = struct.unpack(">III", payload[:12])
             jpg_data = payload[12:12 + jpg_len]
             self._update_frame("full", jpg_data, width, height)
-
         elif pdu_type == PDU_TYPE_RECT:
+            if len(payload) < 28:
+                return
             x, y, w, h, jpg_len = struct.unpack(">IIIII", payload[:20])
             full_w, full_h = struct.unpack(">II", payload[20:28])
             jpg_data = payload[28:28 + jpg_len]
             self._update_frame("rect", jpg_data, full_w, full_h, x, y)
 
-    # Cập nhật canvas
     def _update_frame(self, frame_type, jpg_bytes, full_w, full_h, x=0, y=0):
         patch = Image.open(io.BytesIO(jpg_bytes))
-
         if frame_type == "full" or self.image is None:
             self.image = patch
             self.remote_width, self.remote_height = full_w, full_h
-
-            # Tính tỉ lệ hiển thị để fit cửa sổ
             screen_w = self.root.winfo_screenwidth()
             screen_h = self.root.winfo_screenheight()
             scale = min(screen_w / full_w, screen_h / full_h)
-            self.display_scale = scale
             self.display_size = (int(full_w * scale), int(full_h * scale))
             self.canvas.config(width=self.display_size[0], height=self.display_size[1])
         else:
-            # Ghép vùng delta vào frame hiện có
+            if self.image.size != (full_w, full_h):
+                self.image = Image.new("RGB", (full_w, full_h))
             self.image.paste(patch, (x, y))
 
-        # Resize để hiển thị
         display_img = self.image.resize(self.display_size)
         self.tk_img = ImageTk.PhotoImage(display_img)
         self.canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
         self.canvas.image = self.tk_img
 
-    # Lấy tỷ lệ hiển thị để tính ngược toạ độ
-    def get_scale_ratio(self):
-        """Tỷ lệ từ màn hình hiển thị → màn hình gốc client"""
-        if not self.remote_width or not self.remote_height:
-            return 1.0
-        return self.remote_width / self.display_size[0]
+    def map_to_remote(self, mx, my):
+        """Chuyển từ màn hình manager -> tọa độ client"""
+        if not self.remote_width or not self.remote_height or not self.display_size:
+            return mx, my
+        scale_x = self.remote_width / self.display_size[0]
+        scale_y = self.remote_height / self.display_size[1]
+        return int(mx * scale_x), int(my * scale_y)
