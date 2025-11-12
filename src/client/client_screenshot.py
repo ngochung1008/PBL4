@@ -1,5 +1,3 @@
-# client_screenshot.py
-
 "file dùng"
 """
 ClientScreenshot
@@ -130,6 +128,8 @@ class ClientScreenshot:
             width, height = img.size
             ts_ms = int(time.time() * 1000)  
             seq = self.frame_seq
+            # tăng seq cho frame tiếp theo
+            self.frame_seq += 1
             # Cập nhật ảnh trước (dạng grayscale)
             self._prev_image = img.convert("L")
 

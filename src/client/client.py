@@ -1,43 +1,31 @@
-import threading
-from client_network import ClientNetwork
-from client_sender import ClientSender
-from client_input_handler import ClientInputHandler
-from client_screenshot import ClientScreenshot
+# client.py
+import argparse
+from client.client_network.client_network import ClientNetwork
+from client.client_network.client_sender import ClientSender
+from client.client_screenshot import ClientScreenshot
+from client.client_input import ClientInputHandler
 
-class ClientApp:
-    """Quản lý toàn bộ client: chụp màn hình, gửi frame, nhận input"""
-    def __init__(self, server_host="127.0.0.1", server_port=8443, client_id="client_01"):
-        self.network = ClientNetwork(server_host, server_port, client_id)
-        self.sender = ClientSender(self.network)
-        self.screenshot = ClientScreenshot(fps=2, quality=75, max_dimension=1280)
-        self.input_handler = ClientInputHandler(self.network)
-        self.running = True
+def main():
+    parser = argparse.ArgumentParser(description="Client – gửi màn hình & nhận điều khiển từ server.")
+    parser.add_argument("server_host", help="Địa chỉ IP của server")
+    parser.add_argument("server_port", type=int, help="Cổng của server")
+    parser.add_argument("--id", default="client1", help="ID của client")
+    args = parser.parse_args()
 
-    def start(self):
-        print("[CLIENT] Connecting to server...")
-        self.network.connect()
+    client_net = ClientNetwork(args.server_host, args.server_port, client_id=args.id)
+    if not client_net.connect():
+        print("❌ Kết nối thất bại.")
+        return
 
-        # Bắt đầu luồng nhận input từ server
-        t_input = threading.Thread(target=self.input_handler.handle_loop, daemon=True)
-        t_input.start()
+    sender = ClientSender(client_net.sock)
+    sender.start()
 
-        # Callback nhận ảnh chụp từ ClientScreenshot
-        def on_capture(width, height, jpg_bytes, bbox, pil_img, seq, ts_ms):
-            # Gửi frame kèm seq và timestamp
-            self.sender.send_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
-
-        print("[CLIENT] Starting capture loop...")
-        self.screenshot.capture_loop(on_capture)
-
-    def stop(self):
-        self.screenshot.stop = True
-        self.input_handler.running = False
-        self.network.close()
+    capturer = ClientScreenshot(fps=2)
+    try:
+        capturer.capture_loop(lambda w,h,jpg,bbox,img,seq,ts: sender.enqueue_frame(w,h,jpg,bbox,seq,ts))
+    except KeyboardInterrupt:
+        capturer.stop = True
+        sender.stop()
 
 if __name__ == "__main__":
-    app = ClientApp()
-    try:
-        app.start()
-    except KeyboardInterrupt:
-        app.stop()
-        print("\n[CLIENT] Stopped.")
+    main()
