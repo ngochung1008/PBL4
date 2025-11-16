@@ -22,7 +22,6 @@ class DateTimeEncoder(json.JSONEncoder):
 
 def send_json(conn, msg_type, data):
     json_data = json.dumps(data, cls=DateTimeEncoder).encode("utf-8")
-    # json_data = json.dumps(data).encode("utf-8")
     length = struct.pack("!I", len(json_data))
     header = struct.pack("!B", msg_type)
     conn.sendall(header + length + json_data)

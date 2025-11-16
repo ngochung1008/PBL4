@@ -1,46 +1,31 @@
 # client.py
-# -*- coding: utf-8 -*-
-from client_screenshot import ClientScreenshot
-from client_network import ClientScreenSenderAdvanced
-import threading
-import signal
-import sys
+import argparse
+from client.client_network.client_network import ClientNetwork
+from client.client_network.client_sender import ClientSender
+from client.client_screenshot import ClientScreenshot
+from client.client_input import ClientInputHandler
 
 def main():
-    SERVER_HOST = "10.10.58.163"
-    SERVER_PORT = 33890
-    CLIENT_ID = "client01"
+    parser = argparse.ArgumentParser(description="Client – gửi màn hình & nhận điều khiển từ server.")
+    parser.add_argument("server_host", help="Địa chỉ IP của server")
+    parser.add_argument("server_port", type=int, help="Cổng của server")
+    parser.add_argument("--id", default="client1", help="ID của client")
+    args = parser.parse_args()
 
-    # config
-    fps = 2
-    quality = 75
-    max_dimension = 1280
-    use_encryption = False   # set True nếu đã cài PyCryptodome và muốn mã hóa
-    rect_threshold_area = 20000  # px^2
+    client_net = ClientNetwork(args.server_host, args.server_port, client_id=args.id)
+    if not client_net.connect():
+        print("❌ Kết nối thất bại.")
+        return
 
-    capturer = ClientScreenshot(fps=fps, quality=quality, max_dimension=max_dimension, detect_delta=True)
-    sender = ClientScreenSenderAdvanced(SERVER_HOST, SERVER_PORT, CLIENT_ID, use_encryption=use_encryption,
-                                       rect_threshold_area=rect_threshold_area)
+    sender = ClientSender(client_net.sock)
+    sender.start()
 
-    # start sender thread
-    t_sender = threading.Thread(target=sender.send_loop, daemon=True)
-    t_sender.start()
-
-    # start capturer (runs in main thread)
-    def shutdown(signum, frame):
-        print("\n[MAIN] shutting down...")
+    capturer = ClientScreenshot(fps=2)
+    try:
+        capturer.capture_loop(lambda w,h,jpg,bbox,img,seq,ts: sender.enqueue_frame(w,h,jpg,bbox,seq,ts))
+    except KeyboardInterrupt:
         capturer.stop = True
         sender.stop()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
-
-    try:
-        capturer.capture_loop(sender.enqueue_frame)
-    except KeyboardInterrupt:
-        shutdown(None, None)
-
 
 if __name__ == "__main__":
     main()

@@ -94,11 +94,10 @@ class AddClientWindow(QWidget):
         main_layout.addLayout(center_layout)
         main_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
-        # ✅ Kết nối nút back
         self.back_btn.clicked.connect(self.open_manage_clients)
 
     def open_manage_clients(self):
-        from src.gui.manage_clients import ManageClientsWindow  # ✅ import muộn tránh lỗi vòng lặp
+        from src.gui.manage_clients import ManageClientsWindow 
         self.manage_clients_window = ManageClientsWindow()
         self.manage_clients_window.show()
         self.close()
@@ -106,7 +105,7 @@ class AddClientWindow(QWidget):
     def connect_client(self):
         username = self.ip_edit.text().strip()
         if not username:
-            self.status_label.setText("Status: Please enter a valid IP address.")
+            self.status_label.setText("Status: Please enter a valid username.")
             return
         if any(username == x for x, y in QApplication.instance().client_connected):
             self.status_label.setText(f"Status: Client {username} is already connected.")
@@ -123,10 +122,4 @@ class AddClientWindow(QWidget):
                 self.status_label.setText(f"Status: Failed to connect to {username}.")
         except Exception as e:
             self.status_label.setText(f"Status: Error occurred - {str(e)}.")
-    
-# if __name__ == "__main__":
-#     app = QApplication(sys.argv)
-#     app.setFont(QFont("Segoe UI", 10))
-#     w = AddClientWindow()
-#     w.show()
-#     sys.exit(app.exec())
+
