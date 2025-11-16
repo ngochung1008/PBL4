@@ -19,7 +19,9 @@ if __name__ == "__main__":
     from src.client.auth import ClientConnection
     app.conn = ClientConnection()
     app.client_connected = []
+    app.client_list = []
     app.current_user = None  
+    app.current_name = None
     app.aboutToQuit.connect(on_app_exit)
     win = SignInWindow()
     win.show()

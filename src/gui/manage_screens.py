@@ -127,9 +127,7 @@ class ManageScreensWindow(QWidget):
 
         self.back_btn.clicked.connect(self.open_server_gui)
     def open_server_gui(self):
-        import importlib
-        mod = importlib.import_module("server_gui")
-        ServerWindow = getattr(mod, "ServerWindow")
+        from src.gui.server_gui import ServerWindow
         self.server_gui = ServerWindow()
         self.server_gui.show()
         self.close()

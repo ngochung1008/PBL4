@@ -348,5 +348,154 @@ def get_session_by_username(user_name):
             cursor.close()
             conn.close()
 
+def require_connection(token1, token2):
+    try:
+        conn = mysql.connector.connect(
+            host=host_db,      
+            user=user_db,           
+            password=password_db,
+            database=database_db      
+        )
+        cursor = conn.cursor()
+
+        # Thêm bản ghi vào bảng AcceptedConnections
+        cursor.execute("""
+            INSERT INTO View (SessionClientId, SessionServerId, status)
+            VALUES (%s, %s, %s)
+        """, (token1, token2, 'active',))
+        conn.commit()
+        
+        return True
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return False
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+            
+def accept_connection(token1, token2):
+    try:
+        conn = mysql.connector.connect(
+            host=host_db,      
+            user=user_db,           
+            password=password_db,
+            database=database_db      
+        )
+        cursor = conn.cursor()
+
+        # Thêm bản ghi vào bảng AcceptedConnections
+        cursor.execute("""
+            UPDATE view set status = %s
+            where SessionClientId = %s and SessionServerId = %s
+        """, ('accepted', token1, token2,))
+        conn.commit()
+        
+        return True
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return False
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+            
+def end_connected(token1, token2):
+    try:
+        conn = mysql.connector.connect(
+            host=host_db,      
+            user=user_db,           
+            password=password_db,
+            database=database_db      
+        )
+        cursor = conn.cursor()
+
+        # Thêm bản ghi vào bảng AcceptedConnections
+        cursor.execute("""
+            UPDATE view set status = %s
+            where SessionClientId = %s and SessionServerId = %s
+        """, ('ended', token1, token2,))
+        conn.commit()
+        
+        return True
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return False
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_clients_connected(token):
+    try:
+        conn = mysql.connector.connect(
+            host=host_db,
+            user=user_db,
+            password=password_db,
+            database=database_db
+        )
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT SessionServerId, Status FROM View 
+            WHERE SessionClientId = %s 
+        """, (token,))
+
+        rows = cursor.fetchall()
+
+        ff = []
+        
+        for row in rows:
+            session_server_id = row[0]
+            status = row[1]
+            allowed = False
+            if (status == 'accepted'):
+                allowed = True
+            ff.append([session_server_id, allowed])
+        print(':::: ',ff)
+        return ff
+
+    except Exception as e:
+        print("Lỗi:", e)
+        return None
+
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def check_connected_status(token1, token2):
+    try:
+        conn = mysql.connector.connect(
+            host=host_db,      
+            user=user_db,           
+            password=password_db,
+            database=database_db      
+        )
+        cursor = conn.cursor()
+
+        # Thêm bản ghi vào bảng AcceptedConnections
+        cursor.execute("""
+            select status from View where SessionClientId = %s and SessionServerId = %s
+        """, (token1, token2,))
+        row = cursor.fetchone()
+        if row is None:
+            return False  # hoặc False tùy bạn muốn
+        if (row[0]=='accepted'):
+            return True
+        
+        return False
+        
+    except Exception as e:
+        print("Lỗi:", e)
+        return False
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
+
 # print(sign_in("admin", "admin123"))
 # print(sign_up("admin", "admin123", "Administrator", "admin@gmail.com"))

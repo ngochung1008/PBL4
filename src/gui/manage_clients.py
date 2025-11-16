@@ -87,6 +87,10 @@ class ManageClientsWindow(QWidget):
         add_btn.clicked.connect(self.open_add_client)
         
         self.client_list.currentRowChanged.connect(self.show_client_info)
+        self.client_list.itemClicked.connect(
+            lambda item: self.show_client_info(self.client_list.row(item))
+        )
+
         sidebar_layout.addWidget(self.client_list, stretch=1)
         sidebar_layout.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignBottom)
 
@@ -163,19 +167,17 @@ class ManageClientsWindow(QWidget):
         splitter.setSizes([300, 700])
 
         # Dữ liệu giả lập thông tin client
-        self.client_data = {
-            "Alice": {"email": "alice@example.com", "ip": "192.168.1.5", "status": "Connected"},
-            "Bob": {"email": "bob@example.com", "ip": "192.168.1.8", "status": "Not connect"},
-            "Charlie": {"email": "charlie@example.com", "ip": "192.168.1.12", "status": "Connected"},
-            "David": {"email": "david@example.com", "ip": "192.168.1.20", "status": "Not connect"},
-        }
+        # self.client_data = {
+        #     "Alice": {"email": "alice@example.com", "ip": "192.168.1.5", "status": "Connected"},
+        #     "Bob": {"email": "bob@example.com", "ip": "192.168.1.8", "status": "Not connect"},
+        #     "Charlie": {"email": "charlie@example.com", "ip": "192.168.1.12", "status": "Connected"},
+        #     "David": {"email": "david@example.com", "ip": "192.168.1.20", "status": "Not connect"},
+        # }
 
         self.back_btn.clicked.connect(self.open_server_gui)
 
     def open_server_gui(self):
-        import importlib
-        mod = importlib.import_module("server_gui")
-        ServerWindow = getattr(mod, "ServerWindow")
+        from src.gui.server_gui import ServerWindow
         self.server_gui = ServerWindow()
         self.server_gui.show()
         self.close()
@@ -191,20 +193,20 @@ class ManageClientsWindow(QWidget):
         name = self.client_list.item(index).text()
         token = QApplication.instance().client_connected[index][1]
         data = QApplication.instance().conn.client_profile(token)
+        status = QApplication.instance().conn.check_connected_status(token, QApplication.instance().current_user)
         
         if data:
             self.lbl_username.setText(name)
             self.lbl_email.setText(data[4])
             self.lbl_fullname.setText(data[3])
-            # Màu cho trạng thái
-            # if data["status"].lower() == "connected":
-            self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {SPOTIFY_GREEN};")
-            # else:
-            #     self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: gray;")
-            # self.lbl_status.setText(f"Status: {data['status']}")
+            if status.lower() == "connected":
+                self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {SPOTIFY_GREEN};")
+            else:
+                 self.lbl_status.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: gray;")
+            self.lbl_status.setText(f"Status: {status}")
 
     def open_add_client(self):
-        from src.gui.add_client import AddClientWindow  # ✅ import muộn tránh lỗi vòng lặp
+        from src.gui.add_client import AddClientWindow  
         self.add_client_window = AddClientWindow()
         self.add_client_window.show()
         self.close()

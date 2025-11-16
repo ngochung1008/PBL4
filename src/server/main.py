@@ -10,6 +10,9 @@ HOST = "0.0.0.0"
 PORT = 5000
 
 clients = {} 
+same = {}
+client_litst = {}
+token_username = {}
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -84,6 +87,8 @@ def handle_login(conn, addr):
     else:
         token = auth.create_session(username, addr[0], get_mac_from_ip(addr[0]))
         clients[username] = [conn, addr, username, token]
+        same[token] = 1
+        token_username[token] = username
         print(f"[TOKEN] {token}")
         send_message(conn, 1, token)
 
@@ -100,6 +105,7 @@ def handle_logout(conn):
     userid = auth.get_user_by_sessionid(token)
     username = auth.get_user_by_id(userid)[1]
     clients.pop(username, None)
+    token_username.pop(token, None)
     send_json(conn, 1, user)
 
 def handle_signup(conn):
@@ -162,7 +168,54 @@ def client_check(conn):
         send_message(conn, 0)
     else:
         send_message(conn, 1, auth.get_session_by_username(username))
-        
+
+def handle_require_connect(conn):
+    token1 = read_field(conn).decode("utf-8")
+    token2 = read_field(conn).decode("utf-8")
+    auth.require_connection(token1, token2)
+    same[token1] = 1
+    send_message(conn, 1)
+    
+def handle_accept_connect(conn):
+    token1 = read_field(conn).decode("utf-8")
+    name = read_field(conn).decode("utf-8")
+    token2 = clients[name][3]
+    auth.accept_connection(token1, token2)
+    same[token1] = 1
+    send_message(conn, 1)
+
+def handle_end_connect(conn):
+    token1 = read_field(conn).decode("utf-8")
+    name = read_field(conn).decode("utf-8")
+    token2 = clients[name][3]
+    auth.end_connected(token1, token2)
+    same[token1] = 1
+    send_message(conn, 1)
+
+def handle_list_clients_connected(conn):
+    token = read_field(conn).decode("utf-8")
+    clients_list = auth.get_clients_connected(token)
+    print(' ---> ',client_litst)
+    if same.get(token) is not None and same[token] == 0:
+        send_message(conn, 0)
+        return
+    else:
+        clients_list = auth.get_clients_connected(token)
+        cur = []
+        for x in clients_list:
+            name = token_username[x[0]]
+            status = x[1]
+            cur.append({"name": name, "allowed": status})
+        client_litst[token] = cur
+        same[token] = 1
+    send_json(conn, 1, cur)
+
+def handle_check_connected_status(conn):
+    token1 = read_field(conn).decode("utf-8")
+    token2 = read_field(conn).decode("utf-8")
+    oke = auth.check_connected_status(token1, token2)
+    send_message(conn, oke)
+
 def client_thread(conn, addr):
     print(f"[+] Connect from {addr}")
     try:
@@ -194,9 +247,24 @@ def client_thread(conn, addr):
             elif msg_type == 7:
                 print(f"[{addr}] Check username request")
                 client_check(conn)
+            elif msg_type == 8:
+                print(f"[{addr}] Reqire connect request")
+                handle_require_connect(conn)
+            elif msg_type == 9:
+                print(f"[{addr}] Accept connect request")
+                handle_accept_connect(conn)
+            elif msg_type == 10:
+                print(f"[{addr}] End connect request")
+                handle_end_connect(conn)
+            elif msg_type == 11:
+                print(f"[{addr}] Get client list request")
+                handle_list_clients_connected(conn)
+            elif msg_type == 12:
+                print(f"[{addr}] Check connected")
+                handle_check_connected_status(conn)
             else:
                 print("NO")
-                reply = b"Unknown type"
+                send_message(conn, 0)
 
             # conn.sendall(reply)
 

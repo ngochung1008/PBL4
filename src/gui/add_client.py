@@ -113,7 +113,10 @@ class AddClientWindow(QWidget):
             return
         try: 
             success, token = QApplication.instance().conn.client_check(username)
+            if token == QApplication.instance().current_user:
+                success = 0
             if success:
+                QApplication.instance().conn.client_require_connect(token, QApplication.instance().current_user)
                 QApplication.instance().client_connected.append([username, token])
                 self.status_label.setText(f"Status: Successfully connected to {username}.")
             else:
