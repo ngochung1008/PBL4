@@ -1,55 +1,80 @@
-"""
-client_input.py
-
-Nhận PDU INPUT_EVENT từ server và thực thi tại máy client.
-"""
-
 import pyautogui
-import threading
-import json
-from client.common_network.pdu_parser import PDUParser  # dùng parser để tách payload
-from client.common_network.pdu_builder import PDUBuilder
+import traceback
 
 class ClientInputHandler:
-    def __init__(self, transport):
-        self.transport = transport
-        self.stop = False
-        self.thread = None
+    """
+    Lớp thụ động (passive), nhận PDU input đã được parse
+    và thực thi chúng bằng pyautogui.
+    """
+    def __init__(self, logger=None):
+        self.logger = logger or print
+        
+        try:
+            self.screen_width, self.screen_height = pyautogui.size()
+        except Exception as e:
+            self.logger(f"Không thể lấy kích thước màn hình: {e}")
+            self.screen_width, self.screen_height = 1920, 1080
+        self.logger(f"Kích thước màn hình Client: {self.screen_width}x{self.screen_height}")
 
-    def start(self):
-        self.stop = False
-        self.thread = threading.Thread(target=self._loop, daemon=True)
-        self.thread.start()
+    def handle_input_pdu(self, pdu: dict):
+        """
+        Được gọi bởi ClientNetwork khi có PDU input.
+        """
+        if pdu.get("type") != "input":
+            return
+            
+        ev = pdu.get("input")
+        if not ev:
+            return
+            
+        try:
+            t = ev.get("type")
+            
+            # --- NÂNG CẤP: XỬ LÝ TỌA ĐỘ CHUẨN HÓA ---
+            norm_x = ev.get("x_norm")
+            norm_y = ev.get("y_norm")
+            
+            abs_x, abs_y = None, None
+            if norm_x is not None:
+                abs_x = int(norm_x * self.screen_width)
+            if norm_y is not None:
+                abs_y = int(norm_y * self.screen_height)
+                
+            # Đảm bảo không click/move ra ngoài màn hình
+            if abs_x is not None:
+                abs_x = max(0, min(abs_x, self.screen_width - 1))
+            if abs_y is not None:
+                abs_y = max(0, min(abs_y, self.screen_height - 1))
+            # --- KẾT THÚC NÂNG CẤP ---
 
-    def stop_loop(self):
-        self.stop = True
+            if t == "mouse_move":
+                if abs_x is not None and abs_y is not None:
+                    # Tắt fail-safe của pyautogui để di chuột lên góc
+                    pyautogui.moveTo(abs_x, abs_y, _pause=False)
+            
+            elif t == "mouse_click":
+                # Sửa lỗi: pyautogui.click không nhận x, y trực tiếp
+                # Chúng ta phải moveTo trước rồi click
+                if abs_x is not None and abs_y is not None:
+                    pyautogui.moveTo(abs_x, abs_y, _pause=False)
+                
+                # Xử lý press/release thay vì click
+                pressed = ev.get("pressed", True)
+                button = ev.get("button", "left")
+                if pressed:
+                    pyautogui.mouseDown(button=button, _pause=False)
+                else:
+                    pyautogui.mouseUp(button=button, _pause=False)
 
-    def _loop(self):
-        print("[CLIENT_INPUT] Listening for INPUT_EVENT...")
-        while not self.stop:
-            pdu = self.transport.recv_pdu(timeout=0.2)
-            if not pdu:
-                continue
-            if pdu["type"] != "INPUT_EVENT":
-                continue
-
-            try:
-                data = json.loads(pdu["payload"].decode("utf-8"))
-                self._execute_event(data)
-            except Exception as e:
-                print("[CLIENT_INPUT] Error decoding event:", e)
-
-    def _execute_event(self, ev):
-        t = ev.get("type")
-        if t == "mouse_move":
-            pyautogui.moveTo(ev["x"], ev["y"])
-        elif t == "mouse_click":
-            pyautogui.click(button=ev.get("button", "left"))
-        elif t == "mouse_scroll":
-            pyautogui.scroll(ev.get("delta", 0))
-        elif t == "key_press":
-            pyautogui.keyDown(ev["key"])
-        elif t == "key_release":
-            pyautogui.keyUp(ev["key"])
-        else:
-            print("[CLIENT_INPUT] Unknown event:", ev)
+            elif t == "mouse_scroll":
+                pyautogui.scroll(ev.get("delta", 0))
+            
+            elif t == "key_press":
+                pyautogui.keyDown(ev["key"])
+            
+            elif t == "key_release":
+                pyautogui.keyUp(ev["key"])
+                
+        except Exception as e:
+            self.logger(f"[InputHandler] Lỗi thực thi: {e}")
+            traceback.print_exc()
