@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from ui_components import (
+from src.gui.ui_components import (
     SPOTIFY_GREEN, DARK_BG, CARD_BG, TEXT_LIGHT, SUBTEXT,
     create_back_button, create_search_bar, create_client_list
 )
@@ -124,9 +124,7 @@ class ControlWindow(QWidget):
         self.back_btn.clicked.connect(self.open_server_gui)
 
     def open_server_gui(self):
-        import importlib
-        mod = importlib.import_module("server_gui")
-        ServerWindow = getattr(mod, "ServerWindow")
+        from src.gui.server_gui import ServerWindow
         self.server_gui = ServerWindow()
         self.server_gui.show()
         self.close()
