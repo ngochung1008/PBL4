@@ -87,6 +87,40 @@ class ClientConnection:
         print("[<] Username không tồn tại")
         return False, None
     
+    def client_require_connect(self, token1, token2):
+        self.send_message(8, token1, token2)
+        reply = struct.unpack("!B", self.recv_exact(1))[0]
+        return reply == 1
+
+    def client_accepted_connect(self, token1, token2):
+        self.send_message(9, token1, token2)
+        reply = struct.unpack("!B", self.recv_exact(1))[0]
+        return reply == 1
+    
+    def client_remove_connect(self, token1, token2):
+        self.send_message(10, token1, token2)
+        reply = struct.unpack("!B", self.recv_exact(1))[0]
+        return reply == 1
+    
+    def client_get_client_list(self, token):
+        self.send_message(11, token)
+        reply = struct.unpack("!B", self.recv_exact(1))[0]
+        if reply != 1:
+            print("[<] Lấy danh sách client thất bại")
+            return False, []
+
+        (length,) = struct.unpack("!I", self.recv_exact(4))
+        json_data = self.recv_exact(length)
+        data = json.loads(json_data.decode("utf-8"))
+        return True, data
+    
+    def check_connected_status(self, token1, token2):
+        self.send_message(12, token1, token2)
+        reply = struct.unpack("!B", self.recv_exact(1))[0]
+        if (reply==1):
+            return "connected"
+        return "no connected"
+
     # ----------------- Xử lý thời gian -----------------
     def try_parse_datetime(self, value):
         if isinstance(value, str):

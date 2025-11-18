@@ -125,6 +125,7 @@ class SignInWindow(QWidget):
         QMessageBox.information(None, "Success", f"Account created for {username}!")
         self.token = token 
         QApplication.instance().current_user = token
+        QApplication.instance().current_name = username
         # from src.gui.profile import ProfileWindow
         # from src.model.Users import User
         # data = QApplication.instance().conn.client_profile(token)

@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from ui_components import DARK_BG, create_back_button
+from src.gui.ui_components import DARK_BG, create_back_button
 
 SPOTIFY_GREEN = "#1DB954"
 CARD_BG = "#181818"
@@ -111,24 +111,28 @@ class ServerWindow(QWidget):
 
     # ----------------- Xử lý mở cửa sổ -----------------
     def open_profile(self):
-        from profile import ProfileWindow
-        self.profile_window = ProfileWindow()
+        Token = QApplication.instance().current_user
+        from src.model.Users import User
+        data = QApplication.instance().conn.client_profile(Token)
+        new_user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+        from src.gui.profile import ProfileWindow
+        self.profile_window = ProfileWindow(new_user, Token)
         self.profile_window.show()
         self.close()
     def open_control(self):
-        from control import ControlWindow
+        from src.gui.control import ControlWindow
         self.control_window = ControlWindow()
         self.control_window.show()
         self.close()
         
     def open_manage_screens(self):
-        from manage_screens import ManageScreensWindow
+        from src.gui.manage_screens import ManageScreensWindow
         self.screens_window = ManageScreensWindow()
         self.screens_window.show()
         self.close()
 
     def open_manage_clients(self):
-        from manage_clients import ManageClientsWindow
+        from src.gui.manage_clients import ManageClientsWindow
         self.clients_window = ManageClientsWindow()
         self.clients_window.show()
         self.close()
