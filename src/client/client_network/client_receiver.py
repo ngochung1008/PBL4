@@ -1,3 +1,5 @@
+# client/client_network/client_receiver.py
+
 import threading
 import struct
 import ssl
@@ -55,9 +57,9 @@ class ClientReceiver(threading.Thread):
                 return offset + 12 + jpg_len
             
             elif ptype == PDU_TYPE_RECT:
-                if len(data) < offset + 20: raise ValueError("Thiếu header RECT")
+                if len(data) < offset + 28: raise ValueError("Thiếu header RECT")
                 jpg_len = struct.unpack_from(">I", data, offset + 16)[0]
-                return offset + 20 + 8 + jpg_len
+                return offset + 28 + jpg_len
             
             elif ptype == PDU_TYPE_CONTROL or ptype == PDU_TYPE_INPUT:
                 if len(data) < offset + 4: raise ValueError("Thiếu header CONTROL/INPUT")

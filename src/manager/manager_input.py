@@ -1,3 +1,5 @@
+# manager/manager_input.py
+
 class ManagerInputHandler:
     """
     Lớp tiện ích để gửi input event qua ManagerApp.

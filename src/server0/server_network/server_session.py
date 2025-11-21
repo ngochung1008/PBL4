@@ -1,7 +1,9 @@
+# server0/server_network/server_session.py
+
 import threading
 from queue import Queue, Empty
 from server0.server_constants import (
-    CHANNEL_VIDEO, CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_FILE,
+    CHANNEL_VIDEO, CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_FILE, CHANNEL_CURSOR,
     CMD_DISCONNECT
 )
 from common_network.mcs_layer import MCSLite
@@ -20,24 +22,32 @@ class ServerSession(threading.Thread):
         self.broadcaster = broadcaster
         self.done_callback = done_callback # Báo cho SessionManager khi kết thúc
         
-        self.pdu_queue = Queue(maxsize=256) # Queue riêng của phiên này
+        self.pdu_queue = Queue(maxsize=4096) # Queue riêng của phiên này
         self.running = True
 
     def enqueue_pdu(self, from_id, pdu):
         """SessionManager gọi hàm này để đưa PDU vào xử lý"""
         if not self.running:
             return
+            
+        # 1. Nếu PDU mới là Video/Cursor và queue đầy -> HỦY BỎ PDU MỚI (ít quan trọng hơn)
+        if pdu.get("type") in ("full", "rect", "cursor") and self.pdu_queue.full(): 
+            return # Bỏ PDU mới
+
         try:
             self.pdu_queue.put((from_id, pdu), block=False)
         except Queue.Full:
-            # Nếu queue đầy, PDU video/input cũ sẽ bị loại bỏ
-            # Ưu tiên bỏ PDU video
-            if pdu.get("type") in ("full", "rect"):
-                # Bỏ 1 PDU cũ (video) để thêm PDU mới
-                try: self.pdu_queue.get_nowait()
-                except: pass
-                try: self.pdu_queue.put((from_id, pdu), block=False)
-                except: pass # Bỏ qua nếu vẫn đầy
+            # 2. Nếu PDU mới là Control/Input/File (quan trọng) và queue vẫn đầy,
+            #  => bỏ PDU cũ nhất (có khả năng là Video/Cursor) để chèn PDU mới
+            if pdu.get("type") not in ("full", "rect", "cursor"):
+                try: 
+                    # Loại bỏ 1 phần tử cũ nhất
+                    self.pdu_queue.get_nowait()
+                    # Chèn PDU quan trọng mới
+                    self.pdu_queue.put((from_id, pdu), block=False)
+                except: 
+                    # Nếu vẫn không thể chèn (rất hiếm), bỏ qua
+                    pass
             
     def run(self):
         print(f"[ServerSession-{self.session_id}] Đã khởi động.")
@@ -65,6 +75,9 @@ class ServerSession(threading.Thread):
                     if ptype in ("full", "rect"):
                         # (Video) Gửi trên kênh VIDEO
                         mcs_frame = MCSLite.build(CHANNEL_VIDEO, raw_payload)
+                    elif ptype == "cursor":
+                        # (Cursor) Gửi trên kênh CURSOR
+                        mcs_frame = MCSLite.build(CHANNEL_CURSOR, raw_payload)
                     elif ptype == "control":
                         # (Control) Gửi trên kênh CONTROL
                         if pdu.get("message") == CMD_DISCONNECT:
@@ -93,9 +106,11 @@ class ServerSession(threading.Thread):
                             reason = f"Manager {self.manager_id} yêu cầu ngắt kết nối."
                             self.running = False
                         mcs_frame = MCSLite.build(CHANNEL_CONTROL, raw_payload)
+                    elif ptype != "full" and ptype != "rect" and ptype != "cursor":
+                        # (File) và các PDU khác không phải video/cursor
+                         mcs_frame = MCSLite.build(CHANNEL_FILE, raw_payload)
                     else:
-                        # (File) Gửi trên kênh FILE
-                        mcs_frame = MCSLite.build(CHANNEL_FILE, raw_payload)
+                        continue
                     
                     self.broadcaster.enqueue(target_id, mcs_frame)
                     

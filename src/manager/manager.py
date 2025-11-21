@@ -1,3 +1,5 @@
+# manager/manager.py
+
 import sys
 import time
 from PIL import Image
@@ -8,6 +10,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from manager.manager_network.manager_app import ManagerApp
 from manager.manager_gui import ManagerWindow 
 from manager.manager_input import ManagerInputHandler
+from manager.manager_viewer import ManagerViewer
 from manager.manager_constants import CA_FILE
 import os
 
@@ -19,12 +22,14 @@ class Manager(QObject):
     video_pdu_received = pyqtSignal(object) 
     error_received = pyqtSignal(str)
     disconnected_from_server = pyqtSignal()
+    cursor_pdu_received = pyqtSignal(object)
 
     def __init__(self, host: str, port: int, manager_id: str = "manager1"):
         super().__init__()
         
         self.app = ManagerApp(host, port, manager_id)
         self.input_handler = ManagerInputHandler(self.app)
+        self.viewer = ManagerViewer()
         
         self.current_session_client_id = None
         self.client_list = []
@@ -38,6 +43,7 @@ class Manager(QObject):
         self.app.on_video_pdu = self._on_video_pdu
         self.app.on_file_pdu = self._on_file_pdu
         self.app.on_control_pdu = self._on_control_pdu
+        self.app.on_cursor_pdu = self._on_cursor_pdu
 
     def start(self):
         if not os.path.exists(CA_FILE):
@@ -94,15 +100,10 @@ class Manager(QObject):
         if not self.current_session_client_id:
             return
         
-        jpg_bytes = pdu.get("jpg")
-        if not jpg_bytes:
-            return
+        updated_img = self.viewer.process_video_pdu(self.current_session_client_id, pdu)
         
-        try:
-            img = Image.open(io.BytesIO(jpg_bytes)).convert("RGB")
-            self.video_pdu_received.emit(img)
-        except Exception as e:
-            print(f"Lỗi giải mã ảnh: {e}")
+        if updated_img:
+            self.video_pdu_received.emit(updated_img)
         
     def _on_file_pdu(self, pdu: dict):
         ptype = pdu.get("type")
@@ -113,6 +114,12 @@ class Manager(QObject):
         print(f"[Manager] Control PDU từ client: {pdu.get('message')}")
 
     # --- Slots (Hàm được gọi từ GUI) (Giữ nguyên) ---
+
+    def _on_cursor_pdu(self, pdu: dict):
+        if not self.current_session_client_id:
+            return
+        # pdu chứa x, y (đã chuẩn hóa), cursor_shape (bytes)
+        self.cursor_pdu_received.emit(pdu) # Gửi thẳng dict PDU lên GUI/Viewer
 
     def gui_connect_to_client(self, client_id: str):
         if self.current_session_client_id:
@@ -146,7 +153,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "10.10.58.15"
+    HOST = "192.168.2.31"
     PORT = 3389
     MANAGER_ID = "manager_gui_1"
 
@@ -164,6 +171,7 @@ if __name__ == "__main__":
     manager_logic.session_started.connect(window.set_session_started)
     manager_logic.session_ended.connect(window.set_session_ended)
     manager_logic.video_pdu_received.connect(window.update_video_frame)
+    manager_logic.cursor_pdu_received.connect(window.update_cursor_pos)
     manager_logic.error_received.connect(window.show_error)
     
     window.connect_requested.connect(manager_logic.gui_connect_to_client)

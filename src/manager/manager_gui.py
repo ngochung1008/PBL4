@@ -1,10 +1,15 @@
+# manager/manager_gui.py
+
 import sys
+import os
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QListWidget, QPushButton, QLabel, QListWidgetItem
 )
-from PyQt6.QtGui import QPixmap, QImage, QMouseEvent, QKeyEvent
-from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PyQt6.QtGui import (
+    QPixmap, QImage, QMouseEvent, QKeyEvent, QPainter, QBrush, QPen, QPolygon
+)
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QPoint
 from PIL.ImageQt import toqimage
 
 # --- THÊM: Map phím từ PyQt6 sang PyAutoGUI ---
@@ -70,9 +75,40 @@ class ManagerWindow(QMainWindow):
         
         # --- NÂNG CẤP: Bật theo dõi chuột & Focus ---
         self.screen_label.setMouseTracking(True)
-        # Bắt phím trên cửa sổ chính
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         # --- KẾT THÚC NÂNG CẤP ---
+
+        # Tọa độ con trỏ (chuẩn hóa 0.0-1.0)
+        # Tọa độ PDU Cursor được Client gửi dưới dạng 0-10000
+        self.current_cursor_norm_x = 0.5
+        self.current_cursor_norm_y = 0.5
+
+        # --- TẠO MŨI TÊN CON TRỎ TẠM THỜI (THAY CHO HÌNH VUÔNG ĐỎ) ---
+        cursor_pixmap = QPixmap(24, 24) # Kích thước 24x24
+        cursor_pixmap.fill(Qt.GlobalColor.transparent) 
+        
+        painter = QPainter(cursor_pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Mũi tên màu đen với viền trắng (giống Windows)
+        painter.setBrush(QBrush(Qt.GlobalColor.black)) 
+        painter.setPen(QPen(Qt.GlobalColor.white, 2)) 
+        
+        # Vẽ tam giác đơn giản (Hotspot ~ (1, 1))
+        points = [QPoint(1, 1), QPoint(1, 22), QPoint(15, 15), QPoint(1, 1)]
+        painter.drawConvexPolygon(QPolygon(points))
+        painter.end()
+        
+        self.cursor_pixmap_base = cursor_pixmap # Sử dụng mũi tên đã vẽ
+        # --- KẾT THÚC TẠO MŨI TÊN ---
+        
+        # --- THÊM: CURSOR OVERLAY ---
+        self.cursor_label = QLabel(self.screen_label)
+        self.cursor_label.setStyleSheet("background-color: none;")
+        self.cursor_label.setPixmap(self.cursor_pixmap_base)
+        self.cursor_label.adjustSize()
+        self.cursor_label.hide() 
+        # --- KẾT THÚC THÊM ---
 
         right_layout.addWidget(self.screen_label)
         main_layout.addWidget(left_panel)
@@ -104,15 +140,16 @@ class ManagerWindow(QMainWindow):
 
     # --- Sửa đổi hàm update_video_frame ---
     def update_video_frame(self, pil_image):
+        """Nhận ảnh đã được vá từ Viewer và cập nhật Pixmap."""
         try:
             q_image = toqimage(pil_image)
-            self.client_pixmap = QPixmap.fromImage(q_image) # Lưu ảnh gốc
-            self.update_scaled_pixmap() # Gọi hàm vẽ lại
+            self.client_pixmap = QPixmap.fromImage(q_image) 
+            self.update_scaled_pixmap() 
         except Exception as e:
             print(f"[GUI] Lỗi cập nhật frame: {e}")
             
     def update_scaled_pixmap(self):
-        """Vẽ lại ảnh đã lưu vào label"""
+        """Vẽ lại ảnh đã lưu vào label và cập nhật con trỏ"""
         if self.client_pixmap.isNull():
             return
             
@@ -122,6 +159,7 @@ class ManagerWindow(QMainWindow):
             Qt.TransformationMode.SmoothTransformation
         )
         self.screen_label.setPixmap(scaled_pixmap)
+        self._update_cursor_overlay(scaled_pixmap)
 
     # --- THÊM: Xử lý sự kiện resize cửa sổ ---
     def resizeEvent(self, event):
@@ -129,6 +167,51 @@ class ManagerWindow(QMainWindow):
         super().resizeEvent(event)
         if self.current_client_id:
             self.update_scaled_pixmap()
+
+    # --- THÊM HÀM CẬP NHẬT VỊ TRÍ CON TRỎ ---
+    def _update_cursor_overlay(self, scaled_pixmap: QPixmap):
+        if self.current_client_id and not scaled_pixmap.isNull():
+            
+            label_size = self.screen_label.size()
+            pixmap_size = scaled_pixmap.size()
+            
+            # Tính toán lề (giống _normalize_coords)
+            offset_x = (label_size.width() - pixmap_size.width()) / 2
+            offset_y = (label_size.height() - pixmap_size.height()) / 2
+            
+            # Tính tọa độ tuyệt đối trên QLabel
+            x_abs = int(offset_x + pixmap_size.width() * self.current_cursor_norm_x)
+            y_abs = int(offset_y + pixmap_size.height() * self.current_cursor_norm_y)
+            
+            # Đặt vị trí (trừ đi 1/2 kích thước con trỏ để căn giữa)
+            cursor_w = self.cursor_label.pixmap().width()
+            cursor_h = self.cursor_label.pixmap().height()
+            
+            self.cursor_label.move(x_abs - 1, y_abs - 1)
+            self.cursor_label.show()
+            self.cursor_label.update()
+        else:
+            self.cursor_label.hide()
+            
+    # --- THÊM SLOT NHẬN PDU CURSOR ---
+    def update_cursor_pos(self, pdu: dict):
+        """Nhận PDU cursor, cập nhật vị trí và hình dạng"""
+        
+        # Lỗi: PDU Parser trả về x, y là giá trị Integer (0-10000)
+        # Chúng ta phải CHIA TỶ LỆ về 0.0-1.0
+        x_int = pdu.get('x', 5000)
+        y_int = pdu.get('y', 5000)
+        
+        # print(f"[GUI/CURSOR] Nhận: ({x_int}, {y_int})")
+        
+        # Chia tỷ lệ
+        self.current_cursor_norm_x = x_int / 10000.0
+        self.current_cursor_norm_y = y_int / 10000.0
+        
+        # TODO: Logic xử lý thay đổi hình dạng con trỏ (cursor_shape) tại đây
+        
+        if not self.screen_label.pixmap().isNull():
+             self._update_cursor_overlay(self.screen_label.pixmap())
 
     # --- Slots (Hàm được gọi từ bên ngoài) ---
     def update_client_list(self, client_list: list):
@@ -140,6 +223,7 @@ class ManagerWindow(QMainWindow):
         self.screen_label.setText(f"Đang xem {client_id}...")
         self.update_button_states()
         self.setFocus() # Chuyển focus để bắt phím
+        self.cursor_label.show()
 
     def set_session_ended(self):
         self.current_client_id = None
@@ -148,6 +232,7 @@ class ManagerWindow(QMainWindow):
         self.client_pixmap = QPixmap() # Xóa ảnh
         self.screen_label.setPixmap(self.client_pixmap)
         self.update_button_states()
+        self.cursor_label.hide()
         
     def show_error(self, message: str):
         print(f"--- LỖI TỪ SERVER: {message} ---")

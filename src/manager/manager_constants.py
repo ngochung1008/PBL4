@@ -1,3 +1,4 @@
+# manager/manager_constants.py
 # --- Cấu hình Mạng & Bảo mật ---
 
 # BẮT BUỘC: File CA (Certificate Authority) của server
@@ -5,10 +6,8 @@
 # Sao chép file 'server.crt' từ server và đổi tên thành 'ca.crt' ở đây.
 import os
 
-
 _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 CA_FILE = os.path.join(_CURRENT_DIR, "ca.crt")
-
 
 # --- Định nghĩa Kênh (Channel) ---
 # Phải khớp với server
@@ -16,12 +15,14 @@ CHANNEL_VIDEO = 2
 CHANNEL_CONTROL = 3
 CHANNEL_INPUT = 4
 CHANNEL_FILE = 5
+CHANNEL_CURSOR = 6
 
 ALL_CHANNELS = (
     CHANNEL_VIDEO,
     CHANNEL_CONTROL,
     CHANNEL_INPUT,
     CHANNEL_FILE,
+    CHANNEL_CURSOR,
 )
 
 # --- Lệnh Gửi đi (Manager -> Server) ---

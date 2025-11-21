@@ -1,4 +1,4 @@
-# src/client/client_screenshot.py
+# client/client_screenshot.py
 
 from mss import mss
 from PIL import Image, ImageChops
@@ -13,11 +13,11 @@ except AttributeError:
 
 
 class ClientScreenshot:
-    def __init__(self, fps=2, quality=75, max_dimension=1280, detect_delta=True):
+    def __init__(self, fps=15, quality=60, max_dimension=1280, detect_delta=True):
         self.fps = fps
         self.quality = quality
         self.max_dimension = max_dimension
-        self.detect_delta = detect_delta
+        self.detect_delta = False
 
         self._first_frame = True
         self._prev_image = None
@@ -25,6 +25,8 @@ class ClientScreenshot:
         self.stop = False
         self.frame_seq = 0
         self._lock = threading.Lock()
+        self.FULL_FRAME_INTERVAL = 60.0 # <--- [SỬA ĐỔI] 30 giây
+        self.last_full_frame_ts = 0.0 # <--- [SỬA ĐỔI] Thêm biến thời gian
 
     def _resize_if_needed(self, img):
         w, h = img.size
@@ -36,6 +38,8 @@ class ClientScreenshot:
 
     def _encode_jpeg(self, img):
         bio = io.BytesIO()
+        if img.mode != "RGB":
+            img = img.convert("RGB")
         img.save(bio, format="JPEG", quality=self.quality)
         return bio.getvalue()
 
@@ -48,10 +52,24 @@ class ClientScreenshot:
 
     def compute_delta_bbox(self, img):
         if not self.detect_delta or self._prev_image is None:
+            # [SỬA] Đảm bảo prev_image được khởi tạo là ảnh thang xám
             self._prev_image = img.convert("L")
             return None
+            
+        # 1. Tính toán sự khác biệt (trên ảnh thang xám)
         diff = ImageChops.difference(img.convert("L"), self._prev_image)
-        bbox = diff.getbbox()
+        
+        # 2. Áp dụng Threshold
+        threshold_value = 30
+        mask = diff.point(lambda p: 255 if p > threshold_value else 0) 
+        
+        # 3. Tính toán bounding box từ mask
+        bbox = mask.getbbox()
+        
+        if bbox is not None:
+            # [SỬA] Cập nhật ảnh cũ sang ảnh mới (nếu có thay đổi)
+            self._prev_image = img.convert("L") 
+            
         return bbox
 
     def force_full_frame(self):
@@ -60,40 +78,33 @@ class ClientScreenshot:
 
     def capture_loop(self, callback):
         interval = 1.0 / self.fps
-        self._first_frame = True
-        self._prev_image = None
+        print(f"[ClientScreenshot] Bắt đầu capture loop (Luôn gửi FULL frame)...")
 
         while not self.stop:
             start_time = time.perf_counter()
-            img = self.capture_once()
-
-            bbox = None
-            with self._lock:
-                if self._force_full:
-                    bbox = None
-                    self._force_full = False
-
-            if not self._first_frame and self.detect_delta:
-                bbox = self.compute_delta_bbox(img)
-            else:
-                self._first_frame = False
-
-            if bbox is None and not self._first_frame:
-                elapsed = time.perf_counter() - start_time
-                time.sleep(max(0, interval - elapsed))
-                continue
-
-            jpg_bytes = self._encode_jpeg(img.crop(bbox) if bbox else img)
-            width, height = img.size
-            ts_ms = int(time.time() * 1000)
-            seq = self.frame_seq
-            self.frame_seq += 1
-            self._prev_image = img.convert("L")
-
+            
             try:
-                callback(width, height, jpg_bytes, bbox, img, seq, ts_ms)
-            except Exception as e:
-                print("[ClientScreenshot] Callback error:", e)
+                # 1. Chụp ảnh
+                img = self.capture_once()
 
+                # 2. Mặc định luôn là FULL FRAME (bbox = None)
+                bbox = None 
+                
+                # 3. Encode JPEG
+                jpg_bytes = self._encode_jpeg(img)
+                width, height = img.size
+                
+                ts_ms = int(time.time() * 1000)
+                seq = self.frame_seq
+                self.frame_seq += 1
+
+                # 4. Gửi callback
+                # print(f"[ClientScreenshot] Gửi frame {seq}, size={len(jpg_bytes)} bytes")
+                callback(width, height, jpg_bytes, bbox, img, seq, ts_ms)
+
+            except Exception as e:
+                print(f"[ClientScreenshot] Lỗi: {e}")
+
+            # Điều chỉnh FPS
             elapsed = time.perf_counter() - start_time
             time.sleep(max(0, interval - elapsed))

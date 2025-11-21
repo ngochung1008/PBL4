@@ -5,7 +5,7 @@ import struct
 import time
 from typing import Optional, Dict,  Tuple
 from common_network.constants import (
-    PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT,
+    PDU_TYPE_CURSOR, PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT,
     PDU_TYPE_FILE_START, PDU_TYPE_FILE_CHUNK, PDU_TYPE_FILE_END, PDU_TYPE_FILE_ACK, PDU_TYPE_FILE_NAK,
     SHARE_CTRL_HDR_FMT, SHARE_HDR_SIZE,
     FRAGMENT_FLAG, FRAGMENT_HDR_FMT, FRAGMENT_HDR_SIZE,
@@ -86,7 +86,7 @@ class PDUParser:
         
         return None
 
-    def parse(self, data: bytes) -> Optional[dict]:
+    def parse(self, data: bytes, reassemble: bool = True) -> Optional[dict]:
         """
         Phân tích (parse) MỘT PDU payload (frame) duy nhất
         1. Phân tích PDU.
@@ -101,6 +101,14 @@ class PDUParser:
         offset = SHARE_HDR_SIZE
 
         if self._is_fragment(flags):
+            if not reassemble:
+                base = {"seq": seq, "ts_ms": ts_ms, "flags": flags}
+                # Trả về đúng loại PDU để ServerSession biết đường routing
+                if ptype == PDU_TYPE_FULL: return {**base, "type": "full"}
+                if ptype == PDU_TYPE_RECT: return {**base, "type": "rect"}
+                if ptype == PDU_TYPE_CURSOR: return {**base, "type": "cursor"}
+                return {**base, "type": "unknown_fragment"}
+            
             if len(data) < SHARE_HDR_SIZE + FRAGMENT_HDR_SIZE:
                 raise ValueError("fragment PDU too small for frag header")
             
@@ -175,6 +183,19 @@ class PDUParser:
             except Exception:
                 pass
             return {**base, "type": "input", "input": obj, "raw_body": body}
+
+        elif ptype == PDU_TYPE_CURSOR:
+            if len(data) < offset + 12:
+                raise ValueError("CURSOR too small")
+            x, y, shape_len = struct.unpack(">III", data[offset:offset+12])
+            offset += 12
+            
+            cursor_shape = data[offset:offset+shape_len]
+            
+            return {
+                **base, "type": "cursor", "x": x, "y": y, 
+                "cursor_shape": cursor_shape
+            }
 
         elif ptype == PDU_TYPE_FILE_START:
             if len(data) < offset + 2:

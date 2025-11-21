@@ -1,3 +1,5 @@
+# manager/manager_network/manager_receiver.py
+
 import threading
 import struct
 import ssl
@@ -8,7 +10,7 @@ from common_network.tpkt_layer import TPKTLayer
 from common_network.constants import (
     SHARE_CTRL_HDR_FMT, SHARE_HDR_SIZE,
     FRAGMENT_FLAG, FRAGMENT_HDR_FMT, FRAGMENT_HDR_SIZE,
-    PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT,
+    PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT, PDU_TYPE_CURSOR,
     PDU_TYPE_FILE_START, PDU_TYPE_FILE_CHUNK, PDU_TYPE_FILE_END, 
     PDU_TYPE_FILE_ACK, PDU_TYPE_FILE_NAK
 )
@@ -54,14 +56,19 @@ class ManagerReceiver(threading.Thread):
                 return offset + 12 + jpg_len
             
             elif ptype == PDU_TYPE_RECT:
-                if len(data) < offset + 20: raise ValueError("Thiếu header RECT")
+                if len(data) < offset + 28: raise ValueError("Thiếu header RECT")
                 jpg_len = struct.unpack_from(">I", data, offset + 16)[0]
-                return offset + 20 + 8 + jpg_len
+                return offset + 28 + jpg_len
             
             elif ptype == PDU_TYPE_CONTROL or ptype == PDU_TYPE_INPUT:
                 if len(data) < offset + 4: raise ValueError("Thiếu header CONTROL/INPUT")
                 msg_len = struct.unpack_from(">I", data, offset)[0]
                 return offset + 4 + msg_len
+            
+            elif ptype == PDU_TYPE_CURSOR:
+                if len(data) < offset + 12: raise ValueError("Thiếu header CURSOR")
+                shape_len = struct.unpack_from(">I", data, offset + 8)[0]
+                return offset + 12 + shape_len
                 
             elif ptype == PDU_TYPE_FILE_START:
                 if len(data) < offset + 2: raise ValueError("Thiếu header FILE_START")
@@ -118,6 +125,8 @@ class ManagerReceiver(threading.Thread):
                 continue
 
             if parsed and parsed.get("type") != "fragment_pending":
+                if parsed.get("type") in ("control", "cursor", "input"):
+                    print(f"[ManagerReceiver] NHẬN GÓI TIN NHỎ: {parsed.get('type')} Channel: {channel_id}")
                 parsed["_raw_payload"] = pdu_bytes
                 
                 # Đẩy PDU (dict) vào hàng đợi chung

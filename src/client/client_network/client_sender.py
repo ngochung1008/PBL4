@@ -1,3 +1,5 @@
+# client/client_network/client_sender.py
+
 import threading
 import queue
 import time
@@ -12,6 +14,8 @@ from common_network.durable_queue import DurableQueue
 from common_network.file_utils import stream_file_in_chunks, crc32_bytes
 from common_network.pdu_parser import PDUParser 
 from client.client_constants import CHANNEL_VIDEO, CHANNEL_FILE
+# [QUAN TRỌNG] Import các hằng số cần thiết
+from common_network.constants import SHARE_HDR_SIZE, FRAGMENT_HDR_SIZE, MAX_TPKT_LENGTH
 
 class ClientSender:
     def __init__(self, 
@@ -55,15 +59,18 @@ class ClientSender:
         try:
             if seq is None: seq = self.next_seq()
             if ts_ms is None: ts_ms = int(time.time() * 1000)
+            
+            # Gửi non-blocking
             self.frame_q.put_nowait((width, height, jpg_bytes, bbox, seq, ts_ms))
             return True
         except queue.Full:
+            # Nếu queue đầy, bỏ frame cũ nhất
             try:
-                _ = self.frame_q.get_nowait()
-                self.frame_q.put_nowait((width, height, jpg_bytes, bbox, seq, ts_ms))
+                self.frame_q.get_nowait() 
+                self.frame_q.put_nowait((width, height, jpg_bytes, bbox, seq, ts_ms)) 
                 return True
             except Exception:
-                return False
+                return False 
 
     def start(self):
         if self._running:
@@ -83,42 +90,46 @@ class ClientSender:
             self._resend_thread.join(timeout=1.0)
 
     def _frame_sender_loop(self):
-        # --- ĐÂY LÀ PHẦN SỬA LỖI QUAN TRỌNG NHẤT ---
-        # Giới hạn PDU phải nhỏ hơn 65535 trừ đi 8 bytes header (TPKT+MCS)
-        MAX_PDU_PAYLOAD = 65527 # (65535 - 8)
+        # TPKT Overhead = 4 bytes. MCS Header = 4 bytes. Tổng Header = 8 bytes.
+        # PDU tối đa (Max MCS payload) = MAX_TPKT_LENGTH - 4 (TPKT Header) - 4 (MCS Header) = 65527
+        MAX_FRAGMENT_SIZE = MAX_TPKT_LENGTH - 8 
+        MAX_BODY_SIZE_PER_FRAGMENT = 64000
         
         while self._running:
             try:
-                width, height, jpg, bbox, seq, ts_ms = self.frame_q.get(timeout=0.5)
+                width, height, jpg, bbox, seq, ts_ms = self.frame_q.get(timeout=0.1) 
             except queue.Empty:
                 continue
+            
             try:
+                # 1. Tạo PDU (Luôn là FULL Frame theo logic mới)
                 if bbox:
+                    # Logic này có thể không bao giờ chạy nếu bbox luôn None
                     l, u, r, b = bbox
                     w, h = r - l, b - u
                     pdu = PDUBuilder.build_rect_frame_pdu(seq, jpg, l, u, w, h, width, height, flags=0)
                 else:
                     pdu = PDUBuilder.build_full_frame_pdu(seq, jpg, width, height, flags=0)
 
-                # --- KIỂM TRA PHÂN MẢNH (FRAGMENTATION) ---
-                if len(pdu) > MAX_PDU_PAYLOAD:
-                    # PDU quá lớn, cần phân mảnh
-                    # Chú ý: fragmentize cũng phải dùng MAX_PDU_PAYLOAD
-                    fragments = PDUBuilder.fragmentize(pdu, MAX_PDU_PAYLOAD)
+                # 2. Gửi (Có phân mảnh)
+                # Nếu PDU lớn hơn kích thước cho phép, phải chia nhỏ
+                if len(pdu) > MAX_BODY_SIZE_PER_FRAGMENT:
+                    fragments = PDUBuilder.fragmentize(pdu, MAX_BODY_SIZE_PER_FRAGMENT)
+                    
                     for offset, frag_bytes in fragments:
                         if not self._running: break
                         self.network.send_mcs_pdu(self.channel_screen, frag_bytes)
+                        # Sleep cực ngắn để tránh nghẽn socket buffer
+                        time.sleep(0.0005) 
                 else:
-                    # Gửi PDU nguyên khối
+                    # Gửi nguyên cục
                     self.network.send_mcs_pdu(self.channel_screen, pdu)
-                # --- KẾT THÚC SỬA LỖI ---
                         
             except Exception as e:
                 print(f"[ClientSender] Lỗi gửi frame: {e}")
                 time.sleep(0.1)
 
     def send_file(self, filepath: str, chunk_size: int = 32 * 1024):
-        # ... (Code này giữ nguyên) ...
         if not os.path.exists(filepath):
             raise FileNotFoundError(filepath)
         t = threading.Thread(target=self._send_file_thread, args=(filepath, chunk_size), daemon=True)
@@ -195,7 +206,6 @@ class ClientSender:
         if removed_bytes > 0:
             with self.unacked_lock:
                 self.unacked_bytes = max(0, self.unacked_bytes - removed_bytes)
-            # print(f"[ClientSender] ACK {ack_offset}, giải phóng {removed_bytes} bytes. Window: {self.unacked_bytes}")
 
     def handle_file_nak(self, pdu: Dict[str, Any]):
         reason = pdu.get("reason", b"")

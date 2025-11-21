@@ -1,3 +1,5 @@
+# server0/server_network/server_receiver.py
+
 import ssl
 import threading
 import struct
@@ -8,11 +10,11 @@ from common_network.tpkt_layer import TPKTLayer
 from common_network.constants import (
     SHARE_CTRL_HDR_FMT, SHARE_HDR_SIZE,
     FRAGMENT_FLAG, FRAGMENT_HDR_FMT, FRAGMENT_HDR_SIZE,
-    PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT,
+    PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT, PDU_TYPE_CURSOR,
     PDU_TYPE_FILE_START, PDU_TYPE_FILE_CHUNK, PDU_TYPE_FILE_END, 
     PDU_TYPE_FILE_ACK, PDU_TYPE_FILE_NAK
 )
-from server0.server_constants import ALL_CHANNELS
+from server0.server_constants import ALL_CHANNELS, CHANNEL_VIDEO, CHANNEL_CURSOR
 
 class ServerReceiver(threading.Thread):
     """
@@ -21,11 +23,11 @@ class ServerReceiver(threading.Thread):
     Xử lý buffer để trích xuất từng PDU hoàn chỉnh.
     Đẩy PDU (dict) đã parse vào pdu_queue (hàng đợi chung của ServerNetwork).
     """
-    def __init__(self, ssl_sock, client_id: str, pdu_queue, done_callback):
+    def __init__(self, ssl_sock, client_id: str, pdu_push_callback, done_callback):
         super().__init__(daemon=True, name=f"Receiver-{client_id}")
         self.sock = ssl_sock
         self.client_id = client_id
-        self.pdu_queue = pdu_queue
+        self.pdu_push_callback = pdu_push_callback
         self.done_callback = done_callback # Hàm gọi khi thread này kết thúc
         
         self.mcs = MCSLite()
@@ -139,24 +141,21 @@ class ServerReceiver(threading.Thread):
             pdu_bytes = buf[:total_pdu_len]
             del buf[:total_pdu_len] # Tiêu thụ PDU khỏi buffer
 
-            # 4. Parse PDU
+            # 4. Parse PDU & đẩy vào hàng đợi
             try:
-                parsed = self.parser.parse(pdu_bytes)
+                # [SỬA ĐỔI] Nếu là kênh VIDEO hoặc CURSOR, set reassemble=False
+                # Server chỉ chuyển tiếp (Forward), không lắp ráp
+                should_reassemble = (channel_id != CHANNEL_VIDEO and channel_id != CHANNEL_CURSOR)
+                
+                parsed = self.parser.parse(pdu_bytes, reassemble=should_reassemble)
             except Exception as e:
-                print(f"[Receiver-{self.client_id}] Lỗi parse PDU, bỏ qua: {e}")
-                continue # Bỏ qua PDU hỏng
+                print(f"[Receiver-{self.client_id}] Lỗi parse: {e}")
+                continue
 
-            # 5. Đẩy PDU vào hàng đợi chung
             if parsed and parsed.get("type") != "fragment_pending":
                 parsed["_raw_payload"] = pdu_bytes
                 parsed["client_id"] = self.client_id
-                
-                # Đẩy (client_id, pdu_dict)
-                self.pdu_queue.put((self.client_id, parsed))
-                
-            elif parsed and parsed.get("type") == "fragment_pending":
-                # Vẫn đang chờ mảnh, không làm gì cả
-                pass
+                self.pdu_push_callback(self.client_id, parsed)
 
     def run(self):
         try:

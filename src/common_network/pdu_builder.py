@@ -3,9 +3,9 @@
 import json
 import struct
 import time
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from common_network.constants import (
-    PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT,
+    PDU_TYPE_FULL, PDU_TYPE_RECT, PDU_TYPE_CONTROL, PDU_TYPE_INPUT, PDU_TYPE_CURSOR,
     PDU_TYPE_FILE_START, PDU_TYPE_FILE_CHUNK, PDU_TYPE_FILE_END, PDU_TYPE_FILE_ACK, PDU_TYPE_FILE_NAK,
     SHARE_CTRL_HDR_FMT,
     FRAGMENT_FLAG, FRAGMENT_HDR_FMT,
@@ -56,7 +56,20 @@ class PDUBuilder:
         header = PDUBuilder._hdr(seq, PDU_TYPE_INPUT, 0)
         msg_len = struct.pack(">I", len(body))
         return header + msg_len + body
-
+    
+    # tạo pdu con trỏ chuột
+    @staticmethod
+    @staticmethod
+    def build_cursor_pdu(seq: int, x: int, y: int, cursor_shape_data: Optional[bytes] = None) -> bytes:
+        header = PDUBuilder._hdr(seq, PDU_TYPE_CURSOR, 0)
+        # Gói tọa độ (x, y) và độ dài dữ liệu hình dạng con trỏ (nếu có)
+        # x (I - 4 bytes), y (I - 4 bytes), len(shape_data) (I - 4 bytes)
+        shape_len = len(cursor_shape_data) if cursor_shape_data else 0
+        cursor_hdr = struct.pack(">III", x, y, shape_len)
+        if cursor_shape_data:
+            return header + cursor_hdr + cursor_shape_data
+        return header + cursor_hdr
+    
     # tạo pdu bắt đầu truyền file
     @staticmethod
     def build_file_start(seq: int, filename: str, total_size: int, chunk_size: int = 32768, checksum: int = 0) -> bytes:

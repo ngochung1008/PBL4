@@ -1,3 +1,5 @@
+# server0/server_network/server_network.py
+
 import socket
 import ssl
 import threading
@@ -19,7 +21,7 @@ class ServerNetwork:
         self.tls_context = None
         
         # pdu_queue: (client_id, pdu_dict)
-        self.pdu_queue = Queue() 
+        # self.pdu_queue = Queue() 
         self.clients = {}  # cid -> (ssl_sock, receiver_thread)
         self.running = False
         self.lock = threading.Lock()
@@ -58,7 +60,7 @@ class ServerNetwork:
             # --- 4. Bắt đầu luồng xử lý PDU ---
             # Vẫn dùng 1 queue chung để nhận PDU từ tất cả Receiver
             # Nhưng PDU sẽ được dispatch nhanh chóng bởi SessionManager
-            threading.Thread(target=self._pdu_loop, daemon=True).start()
+            # threading.Thread(target=self._pdu_loop, daemon=True).start()
             
             print(f"[ServerNetwork] Đang lắng nghe (có TLS) trên {self.host}:{self.port}")
             
@@ -94,7 +96,12 @@ class ServerNetwork:
 
                 # --- 6. Khởi tạo Receiver Thread ---
                 # pdu_queue là queue chung của ServerNetwork
-                receiver = ServerReceiver(ssl_sock, cid, self.pdu_queue, self._on_receiver_done)
+                receiver = ServerReceiver(
+                    ssl_sock, 
+                    cid, 
+                    pdu_push_callback=self.on_pdu_cb,
+                    done_callback=self._on_receiver_done
+                )
                 receiver.start()
 
                 with self.lock:
@@ -122,22 +129,22 @@ class ServerNetwork:
                 if ssl_sock: ssl_sock.close()
                 else: raw_sock.close()
 
-    def _pdu_loop(self):
-        """Xử lý PDU từ queue chung và chuyển cho callback của SessionManager"""
-        while self.running:
-            try:
-                # Lấy PDU từ bất kỳ Receiver thread nào
-                client_id, pdu = self.pdu_queue.get(timeout=1.0)
+    # def _pdu_loop(self):
+    #     """Xử lý PDU từ queue chung và chuyển cho callback của SessionManager"""
+    #     while self.running:
+    #         try:
+    #             # Lấy PDU từ bất kỳ Receiver thread nào
+    #             client_id, pdu = self.pdu_queue.get(timeout=1.0)
                 
-                if self.on_pdu_cb:
-                    # Chuyển PDU cho SessionManager xử lý
-                    self.on_pdu_cb(client_id, pdu)
+    #             if self.on_pdu_cb:
+    #                 # Chuyển PDU cho SessionManager xử lý
+    #                 self.on_pdu_cb(client_id, pdu)
             
-            # --- ĐÃ SỬA LỖI (2/2): Đổi 'Queue.Empty' thành 'Empty' ---
-            except Empty:
-                continue # Timeout là bình thường, tiếp tục lặp
-            except Exception as e:
-                print(f"[ServerNetwork] Lỗi _pdu_loop: {e}")
+    #         # --- ĐÃ SỬA LỖI (2/2): Đổi 'Queue.Empty' thành 'Empty' ---
+    #         except Empty:
+    #             continue # Timeout là bình thường, tiếp tục lặp
+    #         except Exception as e:
+    #             print(f"[ServerNetwork] Lỗi _pdu_loop: {e}")
 
     def _on_receiver_done(self, client_id):
         """Callback được gọi bởi ServerReceiver khi nó kết thúc (lỗi/mất kết nối)"""

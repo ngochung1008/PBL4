@@ -7,6 +7,7 @@ PDU_TYPE_FULL = 1
 PDU_TYPE_RECT = 2
 PDU_TYPE_CONTROL = 3
 PDU_TYPE_INPUT = 4
+PDU_TYPE_CURSOR = 5
 
 # File transfer PDUs
 PDU_TYPE_FILE_START = 10 # báo hiệu bắt đầu truyền file

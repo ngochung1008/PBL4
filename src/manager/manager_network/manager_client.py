@@ -1,3 +1,5 @@
+# manager/manager_network/manager_client.py
+
 import socket
 import ssl
 from common_network.x224_handshake import X224Handshake, CONFIRM_MAGIC

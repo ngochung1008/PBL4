@@ -1,3 +1,5 @@
+# client/client_input.py
+
 import pyautogui
 import traceback
 
@@ -8,6 +10,9 @@ class ClientInputHandler:
     """
     def __init__(self, logger=None):
         self.logger = logger or print
+
+        pyautogui.FAILSAFE = False # Tắt tính năng đưa chuột về góc để dừng
+        pyautogui.PAUSE = 0.0 # Tắt delay mặc định
         
         try:
             self.screen_width, self.screen_height = pyautogui.size()

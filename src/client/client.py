@@ -1,3 +1,5 @@
+# client/client.py
+
 import threading
 import time
 import os
@@ -8,6 +10,7 @@ from client.client_network.client_network import ClientNetwork
 from client.client_network.client_sender import ClientSender
 from client.client_screenshot import ClientScreenshot
 from client.client_input import ClientInputHandler
+from client.client_cursor import ClientCursorTracker
 from client.client_constants import CLIENT_ID, CA_FILE
 
 class Client:
@@ -15,7 +18,7 @@ class Client:
     Lớp "keo" (glue) cấp cao nhất.
     Khởi tạo và kết nối tất cả các thành phần.
     """
-    def __init__(self, host, port, fps=2, logger=None):
+    def __init__(self, host, port, fps=10, logger=None):
         self.host = host
         self.port = port
         self.fps = fps
@@ -34,11 +37,14 @@ class Client:
             cafile=CA_FILE, 
             logger=self.logger
         )
-        self.screenshot = ClientScreenshot(fps=fps, quality=75, max_dimension=1280)
+        self.screenshot = ClientScreenshot(fps=fps, quality=65, max_dimension=1280)
         self.sender = ClientSender(self.network) # Truyền network
         self.input_handler = ClientInputHandler(logger=self.logger)
-        
+        self.cursor_tracker = ClientCursorTracker(self.network, fps=30, logger=self.logger)
+
         self.screenshot_thread = None
+        self.last_full_frame_ts = 0
+        self.full_frame_interval = 30 # Gửi Full Frame mỗi 30 giây
 
         # --- Kết nối (Wire) các callback ---
         
@@ -69,18 +75,25 @@ class Client:
         
         # Khởi động Screenshot
         self.screenshot.stop = False
+
+        self.screenshot.force_full_frame() # <--- Ép gửi FULL Frame đầu tiên
+        self.last_full_frame_ts = time.time()
+        
         self.screenshot_thread = threading.Thread(
             target=self.screenshot.capture_loop, 
             args=(self._on_frame,), # Callback là _on_frame
             daemon=True
         )
         self.screenshot_thread.start()
+        self.cursor_tracker.start()
         self.logger("[Client] Đã khởi động.")
+        self.last_full_frame_ts = time.time()
         return True
 
     def stop(self):
         self.logger("[Client] Đang dừng...")
         self.screenshot.stop = True
+        self.cursor_tracker.stop()
         self.sender.stop()
         self.network.stop() # Sẽ kích hoạt _on_disconnected
         if self.screenshot_thread:
@@ -92,7 +105,6 @@ class Client:
         Callback từ ClientScreenshot.
         Gửi frame vào hàng đợi của ClientSender.
         """
-        # img không cần thiết, bỏ qua
         self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
 
     def _on_control_pdu(self, pdu: dict):
@@ -106,6 +118,7 @@ class Client:
         self.logger("[Client] _on_disconnected được gọi.")
         # Dọn dẹp các luồng phụ (Sender, Screenshot)
         self.screenshot.stop = True
+        self.cursor_tracker.stop()
         self.sender.stop()
         if self.screenshot_thread:
             self.screenshot_thread.join(timeout=1.0)
@@ -116,14 +129,16 @@ if __name__ == "__main__":
     """
     Main loop - Xử lý tự động kết nối lại (Auto-Reconnect)
     """
-    host = "10.10.58.15" # Đổi thành IP server của bạn
+    host = "192.168.2.31" # Đổi thành IP server của bạn
     port = 3389
     
     # Tạo vòng lặp để tự động kết nối lại
     while True:
         client = None
         try:
-            client = Client(host, port, fps=2)
+            client = Client(host, port, fps=10) 
+            client.screenshot.detect_delta = True
+            client.screenshot.quality = 65
             
             # Hàm start() sẽ block cho đến khi kết nối thành công
             if client.start():

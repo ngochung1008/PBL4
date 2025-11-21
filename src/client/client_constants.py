@@ -1,3 +1,5 @@
+# client/client_constants.py
+
 # --- Cấu hình Mạng & Bảo mật ---
 
 # ID của client, server sẽ thấy tên này.
@@ -21,12 +23,14 @@ CHANNEL_VIDEO = 2
 CHANNEL_CONTROL = 3
 CHANNEL_INPUT = 4
 CHANNEL_FILE = 5
+CHANNEL_CURSOR = 6
 
 ALL_CHANNELS = (
     CHANNEL_VIDEO,
     CHANNEL_CONTROL,
     CHANNEL_INPUT,
     CHANNEL_FILE,
+    CHANNEL_CURSOR,
 )
 
 # --- Lệnh Gửi đi (Client -> Server) ---

@@ -1,3 +1,5 @@
+# server0/server_constants.py
+
 import ssl
 
 # --- Cấu hình Mạng & Bảo mật ---
@@ -29,6 +31,7 @@ CHANNEL_VIDEO = 2
 CHANNEL_CONTROL = 3
 CHANNEL_INPUT = 4
 CHANNEL_FILE = 5
+CHANNEL_CURSOR = 6
 
 # Danh sách tất cả các kênh mà ServerReceiver sẽ lắng nghe
 ALL_CHANNELS = (
@@ -36,6 +39,7 @@ ALL_CHANNELS = (
     CHANNEL_CONTROL,
     CHANNEL_INPUT,
     CHANNEL_FILE,
+    CHANNEL_CURSOR,
 )
 
 # --- Định nghĩa Vai trò (Role) ---

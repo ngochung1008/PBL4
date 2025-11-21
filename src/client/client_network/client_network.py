@@ -1,3 +1,5 @@
+# client/client_network/client_network.py
+
 import threading
 import socket
 import ssl
@@ -10,7 +12,7 @@ from common_network.tpkt_layer import TPKTLayer
 from client.client_network.client_receiver import ClientReceiver
 from client.client_constants import (
     CLIENT_ID, CA_FILE, 
-    CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_VIDEO, CHANNEL_FILE,
+    CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_VIDEO, CHANNEL_FILE, CHANNEL_CURSOR,
     CMD_REGISTER
 )
 
@@ -177,18 +179,49 @@ class ClientNetwork:
     # --- Public API cho ClientSender và Client ---
 
     def send_mcs_pdu(self, channel_id: int, pdu_bytes: bytes):
-        """Gói PDU vào MCS, TPKT và gửi đi (thread-safe)"""
-        if not self.running or not self.client:
+        if not self.running or not self.client: 
             return
-            
         try:
             mcs_frame = MCSLite.build(channel_id, pdu_bytes)
             tpkt_packet = TPKTLayer.pack(mcs_frame)
+            
             with self.lock:
-                self.client.sendall(tpkt_packet)
+                totalsent = 0
+                data_to_send = tpkt_packet
+                
+                # [SỬA LỖI TREO/LAG] Tối ưu: Đặt timeout ngắn cho việc gửi
+                self.client.settimeout(0.1) 
+                
+                while totalsent < len(data_to_send):
+                    sent = self.client.send(data_to_send[totalsent:])
+                    
+                    if sent is None or sent <= 0:
+                         # Nếu bị chặn/disconnect, thoát loop
+                         raise ConnectionError("SSL socket send failed/blocked")
+                    totalsent += sent
+                    
+                # [SỬA LỖI] Reset timeout về None (Blocking) cho Receiver
+                self.client.settimeout(None) 
+
+        except (socket.timeout, ssl.SSLError, ConnectionError) as e:
+            self.logger(f"[ClientNetwork] Lỗi gửi (Timeout/SSL): {e}")
+            self._on_receiver_done() 
         except Exception as e:
             self.logger(f"[ClientNetwork] Lỗi gửi PDU: {e}")
-            self._on_receiver_done() # Gửi lỗi -> ngắt kết nối
+            self._on_receiver_done()
+
+    def send_cursor_pdu(self, x_norm: float, y_norm: float, cursor_shape_bytes: bytes = None):
+        """Gửi PDU Cursor tới Server (dùng để chuyển tiếp tới Manager)"""
+        seq = self._next_seq()
+        
+        # PDUBuilder.build_cursor_pdu: Cần có ở common_network/pdu_builder.py
+        pdu = self.builder.build_cursor_pdu(
+            seq, 
+            int(x_norm * 10000), # Gửi dưới dạng giá trị chuẩn hóa (0-10000)
+            int(y_norm * 10000), # Sẽ được Client/Manager tự decode
+            cursor_shape_bytes
+        )
+        self.send_mcs_pdu(CHANNEL_CURSOR, pdu)
 
     def send_control_pdu(self, message: str):
         """Gửi một PDU Control tới server"""
