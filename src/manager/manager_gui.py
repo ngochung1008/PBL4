@@ -239,11 +239,21 @@ class ManagerWindow(QMainWindow):
         
     # --- NÂNG CẤP: HÀM XỬ LÝ INPUT ---
 
-    def _normalize_coords(self, pos: QMouseEvent.pos):
-        """Chuẩn hóa tọa độ chuột (0.0 -> 1.0)"""
+    def _normalize_coords(self, window_pos: QPoint): # Đổi tham số đầu vào
+        """Chuẩn hóa tọa độ chuột (0.0 -> 1.0) dựa trên vị trí tương đối trong Label"""
         if self.client_pixmap.isNull():
             return None, None
             
+        # --- FIX: Chuyển tọa độ từ Window (Cha) sang Screen Label (Con) ---
+        # mapFrom(self, window_pos) sẽ tính toán offset của left_panel tự động
+        local_pos = self.screen_label.mapFrom(self, window_pos)
+        
+        # Kiểm tra nếu chuột nằm ngoài phạm vi Label thì bỏ qua
+        if local_pos.x() < 0 or local_pos.y() < 0 or \
+           local_pos.x() > self.screen_label.width() or \
+           local_pos.y() > self.screen_label.height():
+            return None, None
+
         scaled_pixmap = self.screen_label.pixmap()
         if scaled_pixmap.isNull():
             return None, None
@@ -251,26 +261,28 @@ class ManagerWindow(QMainWindow):
         label_size = self.screen_label.size()
         pixmap_size = scaled_pixmap.size()
 
-        # Tính toán lề (do KeepAspectRatio)
+        # Tính toán lề đen (do KeepAspectRatio)
         offset_x = (label_size.width() - pixmap_size.width()) / 2
         offset_y = (label_size.height() - pixmap_size.height()) / 2
 
-        x = pos.x() - offset_x
-        y = pos.y() - offset_y
+        # Tính tọa độ thực trên ảnh (trừ đi lề đen)
+        # Sử dụng local_pos thay vì pos gốc
+        x = local_pos.x() - offset_x
+        y = local_pos.y() - offset_y
 
         # Chuẩn hóa
         norm_x = x / pixmap_size.width()
         norm_y = y / pixmap_size.height()
         
+        # Chỉ chấp nhận nếu nằm trong vùng ảnh video
         if 0 <= norm_x <= 1 and 0 <= norm_y <= 1:
             return norm_x, norm_y
         return None, None
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        if not self.current_client_id:
-            return
-        
-        norm_x, norm_y = self._normalize_coords(event.pos())
+        if not self.current_client_id: return
+        # Gọi hàm mới đã fix
+        norm_x, norm_y = self._normalize_coords(event.pos()) 
         if norm_x is not None:
             self.input_event_generated.emit({
                 "type": "mouse_move",
@@ -335,6 +347,7 @@ class ManagerWindow(QMainWindow):
             return
         
         key_name = self._get_key_name(event)
+        print(f"[DEBUG Key] Phím nhấn: {key_name}")
         if key_name and not event.isAutoRepeat(): # Bỏ qua phím lặp
             self.input_event_generated.emit({
                 "type": "key_release",

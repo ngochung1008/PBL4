@@ -1,6 +1,7 @@
 # client/client_screenshot.py
 
-from mss import mss
+# from mss import mss
+import pyautogui
 from PIL import Image, ImageChops
 import io
 import time
@@ -44,11 +45,14 @@ class ClientScreenshot:
         return bio.getvalue()
 
     def capture_once(self):
-        with mss() as sct:
-            monitor = sct.monitors[0]
-            sct_img = sct.grab(monitor)
-            img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-            return self._resize_if_needed(img)
+        # with mss() as sct:
+        #     monitor = sct.monitors[0]
+        #     sct_img = sct.grab(monitor)
+        #     img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+        #     return self._resize_if_needed(img)
+
+        img = pyautogui.screenshot()
+        return self._resize_if_needed(img)
 
     def compute_delta_bbox(self, img):
         if not self.detect_delta or self._prev_image is None:

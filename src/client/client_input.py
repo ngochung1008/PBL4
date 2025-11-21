@@ -25,6 +25,7 @@ class ClientInputHandler:
         """
         Được gọi bởi ClientNetwork khi có PDU input.
         """
+        print(f"[DEBUG Input] Nhận PDU: {pdu}")
         if pdu.get("type") != "input":
             return
             

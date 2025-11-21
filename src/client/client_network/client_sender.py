@@ -120,7 +120,7 @@ class ClientSender:
                         if not self._running: break
                         self.network.send_mcs_pdu(self.channel_screen, frag_bytes)
                         # Sleep cực ngắn để tránh nghẽn socket buffer
-                        time.sleep(0.0005) 
+                        # time.sleep(0.0005) 
                 else:
                     # Gửi nguyên cục
                     self.network.send_mcs_pdu(self.channel_screen, pdu)
