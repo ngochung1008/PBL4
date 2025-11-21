@@ -129,8 +129,8 @@ if __name__ == "__main__":
     """
     Main loop - Xử lý tự động kết nối lại (Auto-Reconnect)
     """
-    host = "192.168.2.31" # Đổi thành IP server của bạn
-    port = 3389
+    host = "10.10.16.39" # Đổi thành IP server của bạn
+    port = 5000
     
     # Tạo vòng lặp để tự động kết nối lại
     while True:

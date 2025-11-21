@@ -10,7 +10,7 @@ from server0.server_network.server_receiver import ServerReceiver
 from server0.server_constants import TLS_VERSION
 
 class ServerNetwork:
-    def __init__(self, host="0.0.0.0", port=3389, max_clients=200, certfile=None, keyfile=None):
+    def __init__(self, host="0.0.0.0", port=5000, max_clients=200, certfile=None, keyfile=None):
         self.host = host
         self.port = port
         self.max_clients = max_clients

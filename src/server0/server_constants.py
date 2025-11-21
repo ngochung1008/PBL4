@@ -4,7 +4,7 @@ import ssl
 
 # --- Cấu hình Mạng & Bảo mật ---
 SERVER_HOST = "0.0.0.0"
-SERVER_PORT = 3389
+SERVER_PORT = 5000
 
 # BẮT BUỘC: Bạn phải tạo file cert và key
 # Lệnh tự tạo (cho development):

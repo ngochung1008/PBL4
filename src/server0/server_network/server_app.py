@@ -5,7 +5,7 @@ from server0.server_network.server_broadcaster import ServerBroadcaster
 from server0.server_network.server_session_manager import SessionManager
 
 class ServerApp:
-    def __init__(self, host="0.0.0.0", port=3389, certfile=None, keyfile=None):
+    def __init__(self, host="0.0.0.0", port=5000, certfile=None, keyfile=None):
         
         # 1. Khởi tạo Broadcaster (Gửi tin nhắn)
         self.broadcaster = ServerBroadcaster()
