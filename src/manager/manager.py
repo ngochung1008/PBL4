@@ -81,8 +81,12 @@ class Manager(QObject):
         self.client_list_updated.emit(client_list)
 
     def _on_session_started(self, client_id: str):
-        self.current_session_client_id = client_id
-        print(f"[Manager] Phiên làm việc với '{client_id}' đã bắt đầu.")
+        # Server xác nhận session đã bắt đầu
+        if self.current_session_client_id != client_id:
+            print(f"[WARN] Server xác nhận ID {client_id} khác với ID dự kiến {self.current_session_client_id}")
+            self.current_session_client_id = client_id
+            
+        print(f"[Manager] Phiên làm việc với '{client_id}' đã CHÍNH THỨC bắt đầu.")
         self.session_started.emit(client_id)
 
     def _on_session_ended(self, client_id: str):
@@ -98,6 +102,8 @@ class Manager(QObject):
 
     def _on_video_pdu(self, pdu: dict):
         if not self.current_session_client_id:
+            # Nếu chạy vào đây nghĩa là Lỗi Race Condition vẫn còn
+            print(f"[Manager] CẢNH BÁO: Bỏ qua video PDU vì chưa có Session ID! Type: {pdu.get('type')}")
             return
         
         updated_img = self.viewer.process_video_pdu(self.current_session_client_id, pdu)
@@ -128,6 +134,13 @@ class Manager(QObject):
         if client_id not in self.client_list:
             print(f"Lỗi: Client {client_id} không có sẵn.")
             return
+        
+        # [SỬA LỖI RACE CONDITION TẠI ĐÂY]
+        # Gán ID ngay lập tức, không chờ server phản hồi "session_started".
+        # Điều này đảm bảo nếu Video Frame tới trước Control Packet, nó vẫn được xử lý.
+        print(f"[Manager] Đặt session ID dự kiến: {client_id}")
+        self.current_session_client_id = client_id 
+        
         self.app.connect_to_client(client_id)
 
     def gui_disconnect_session(self):
@@ -153,7 +166,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "10.10.16.39"
+    HOST = "172.21.1.0"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 

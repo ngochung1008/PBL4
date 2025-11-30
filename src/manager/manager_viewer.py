@@ -41,7 +41,7 @@ class ManagerViewer:
             
             # --- XỬ LÝ PDU FULL (LÀM MỚI TOÀN BỘ) ---
             if ptype == "full":
-                print(f"[Viewer] Nhận FULL Frame size: {new_img.size}")
+                print(f"[Viewer] ===> NHẬN FULL FRAME! Size: {new_img.size}. Client: {client_id}")
                 self.current_base_image[client_id] = new_img
                 self.current_base_size[client_id] = new_img.size
                 return new_img.copy() 

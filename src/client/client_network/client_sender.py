@@ -23,7 +23,7 @@ class ClientSender:
                  channel_screen: int = CHANNEL_VIDEO, 
                  channel_file: int = CHANNEL_FILE,
                  max_unacked_bytes: int = 10 * 1024 * 1024,
-                 frame_queue_size: int = 6):
+                 frame_queue_size: int = 60):
         
         self.network = network 
         self.channel_screen = channel_screen
@@ -54,23 +54,34 @@ class ClientSender:
             return self._seq
 
     def enqueue_frame(self, width: int, height: int, jpg_bytes: bytes, bbox=None, seq: Optional[int]=None, ts_ms: Optional[int]=None):
-        if not self._running:
-            return False
+        if not self._running: return False
+        
+        if seq is None: seq = self.next_seq()
+        if ts_ms is None: ts_ms = int(time.time() * 1000)
+        
+        frame_data = (width, height, jpg_bytes, bbox, seq, ts_ms)
+
         try:
-            if seq is None: seq = self.next_seq()
-            if ts_ms is None: ts_ms = int(time.time() * 1000)
-            
-            # Gửi non-blocking
-            self.frame_q.put_nowait((width, height, jpg_bytes, bbox, seq, ts_ms))
+            self.frame_q.put_nowait(frame_data)
             return True
         except queue.Full:
-            # Nếu queue đầy, bỏ frame cũ nhất
-            try:
-                self.frame_q.get_nowait() 
-                self.frame_q.put_nowait((width, height, jpg_bytes, bbox, seq, ts_ms)) 
-                return True
-            except Exception:
-                return False 
+            # --- [SỬA LẠI ĐOẠN NÀY] ---
+            
+            # Nếu frame mới là FULL FRAME (quan trọng): Xóa sạch hàng đợi cũ để nhét nó vào
+            if bbox is None:
+                # print(f"Queue đầy. Xóa cũ để ưu tiên FULL Frame {seq}")
+                with self.frame_q.mutex:
+                    self.frame_q.queue.clear()
+                try:
+                    self.frame_q.put_nowait(frame_data)
+                    return True
+                except: return False
+            
+            # Nếu frame mới là RECT FRAME (ít quan trọng): Hàng đợi đầy thì vứt luôn frame mới
+            # Đừng xóa frame cũ, vì frame cũ có thể là Full Frame đang chờ gửi!
+            else:
+                # print(f"Queue đầy. Bỏ qua Rect Frame {seq}")
+                return False
 
     def start(self):
         if self._running:

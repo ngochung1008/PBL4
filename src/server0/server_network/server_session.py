@@ -31,7 +31,7 @@ class ServerSession(threading.Thread):
             return
             
         # 1. Nếu PDU mới là Video/Cursor và queue đầy -> HỦY BỎ PDU MỚI (ít quan trọng hơn)
-        if pdu.get("type") in ("full", "rect", "cursor") and self.pdu_queue.full(): 
+        if pdu.get("type") in ("full", "rect") and self.pdu_queue.full(): 
             return # Bỏ PDU mới
 
         try:
@@ -39,7 +39,7 @@ class ServerSession(threading.Thread):
         except Queue.Full:
             # 2. Nếu PDU mới là Control/Input/File (quan trọng) và queue vẫn đầy,
             #  => bỏ PDU cũ nhất (có khả năng là Video/Cursor) để chèn PDU mới
-            if pdu.get("type") not in ("full", "rect", "cursor"):
+            if pdu.get("type") not in ("full", "rect"):
                 try: 
                     # Loại bỏ 1 phần tử cũ nhất
                     self.pdu_queue.get_nowait()

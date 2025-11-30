@@ -82,32 +82,74 @@ class ClientScreenshot:
 
     def capture_loop(self, callback):
         interval = 1.0 / self.fps
-        print(f"[ClientScreenshot] Bắt đầu capture loop (Luôn gửi FULL frame)...")
+        print(f"[ClientScreenshot] Bắt đầu capture loop (Hybrid Mode: Full + Rect)...")
 
         while not self.stop:
             start_time = time.perf_counter()
             
             try:
-                # 1. Chụp ảnh
+                # 1. Chụp ảnh màn hình hiện tại
                 img = self.capture_once()
+                full_width, full_height = img.size
+                
+                # 2. Kiểm tra xem có CẦN gửi Full Frame không?
+                # - Là frame đầu tiên?
+                # - Bị ép buộc (force_full)?
+                # - Đã quá lâu chưa gửi Full Frame (30s)?
+                now = time.time()
+                is_time_for_full = (now - self.last_full_frame_ts) >= self.FULL_FRAME_INTERVAL
+                should_send_full = self._first_frame or self._force_full or is_time_for_full
 
-                # 2. Mặc định luôn là FULL FRAME (bbox = None)
-                bbox = None 
-                
-                # 3. Encode JPEG
-                jpg_bytes = self._encode_jpeg(img)
-                width, height = img.size
-                
+                bbox = None # Mặc định là None (nghĩa là Full Frame)
+
+                if should_send_full:
+                    # --- GỬI FULL FRAME ---
+                    self._first_frame = False
+                    self._force_full = False
+                    self.last_full_frame_ts = now
+                    
+                    # Cập nhật ảnh tham chiếu (để so sánh cho lần sau)
+                    self._prev_image = img.convert("L") 
+                    
+                    # bbox vẫn là None -> Code phía dưới sẽ hiểu là Full Frame
+                    
+                else:
+                    # --- GỬI RECT FRAME (Đây là đoạn bạn cần bật lại) ---
+                    # Tính toán vùng thay đổi so với ảnh trước
+                    bbox = self.compute_delta_bbox(img)
+
+                # 3. Xử lý gửi
+                # Nếu là chế độ Rect (không phải Full) mà bbox là None (nghĩa là màn hình đứng im, không thay đổi)
+                # -> Thì KHÔNG gửi gì cả để tiết kiệm băng thông.
+                if not should_send_full and bbox is None:
+                    # Ngủ bù thời gian rồi tiếp tục vòng lặp
+                    elapsed = time.perf_counter() - start_time
+                    time.sleep(max(0, interval - elapsed))
+                    continue
+
+                # 4. Cắt ảnh và Encode
+                if bbox:
+                    # [RECT] Cắt vùng thay đổi
+                    crop_img = img.crop(bbox)
+                    jpg_bytes = self._encode_jpeg(crop_img)
+                    pass 
+                else:
+                    # [FULL] Lấy toàn bộ ảnh
+                    jpg_bytes = self._encode_jpeg(img)
+
                 ts_ms = int(time.time() * 1000)
                 seq = self.frame_seq
                 self.frame_seq += 1
 
-                # 4. Gửi callback
-                # print(f"[ClientScreenshot] Gửi frame {seq}, size={len(jpg_bytes)} bytes")
-                callback(width, height, jpg_bytes, bbox, img, seq, ts_ms)
+                # 5. Gửi qua callback (vào Sender)
+                sent_ok = callback(full_width, full_height, jpg_bytes, bbox, img, seq, ts_ms)
+                if sent_ok is False:
+                    time.sleep(0.05)
 
             except Exception as e:
                 print(f"[ClientScreenshot] Lỗi: {e}")
+                # import traceback
+                # traceback.print_exc()
 
             # Điều chỉnh FPS
             elapsed = time.perf_counter() - start_time

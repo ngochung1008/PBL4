@@ -105,13 +105,25 @@ class Client:
         Callback từ ClientScreenshot.
         Gửi frame vào hàng đợi của ClientSender.
         """
-        self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
+        return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
 
     def _on_control_pdu(self, pdu: dict):
         """Xử lý PDU control từ server"""
         msg = pdu.get("message", "")
         self.logger(f"[Client] Nhận lệnh từ Server: {msg}")
-        # TODO: Xử lý các lệnh (ví dụ: yêu cầu gửi file,...)
+        
+        # Kiểm tra nếu Server báo "session_started"
+        if msg.startswith("session_started"):
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.logger(f"[Client] ==> Manager {manager_id} đã kết nối! Đang gửi lại FULL FRAME...")
+            
+            # Kích hoạt cờ force_full để vòng lặp screenshot gửi ảnh gốc ngay lập tức
+            self.screenshot.force_full_frame()
+            
+        # Hoặc nếu bạn implement tính năng Refresh thủ công
+        elif msg == "request_refresh":
+            self.logger("[Client] ==> Server yêu cầu làm mới. Gửi Full Frame.")
+            self.screenshot.force_full_frame()
         
     def _on_disconnected(self):
         """Callback từ ClientNetwork khi mất kết nối"""
@@ -129,7 +141,7 @@ if __name__ == "__main__":
     """
     Main loop - Xử lý tự động kết nối lại (Auto-Reconnect)
     """
-    host = "10.10.16.39" # Đổi thành IP server của bạn
+    host = "172.21.1.0" # Đổi thành IP server của bạn
     port = 5000
     
     # Tạo vòng lặp để tự động kết nối lại

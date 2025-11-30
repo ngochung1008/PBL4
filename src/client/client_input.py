@@ -76,10 +76,12 @@ class ClientInputHandler:
                 pyautogui.scroll(ev.get("delta", 0))
             
             elif t == "key_press":
-                pyautogui.keyDown(ev["key"])
+                key = ev["key"]
+                pyautogui.keyDown(key)
             
             elif t == "key_release":
-                pyautogui.keyUp(ev["key"])
+                key = ev["key"]
+                pyautogui.keyUp(key)
                 
         except Exception as e:
             self.logger(f"[InputHandler] Lỗi thực thi: {e}")

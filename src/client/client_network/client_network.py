@@ -190,7 +190,7 @@ class ClientNetwork:
                 data_to_send = tpkt_packet
                 
                 # [SỬA LỖI TREO/LAG] Tối ưu: Đặt timeout ngắn cho việc gửi
-                self.client.settimeout(0.1) 
+                self.client.settimeout(0.5) 
                 
                 while totalsent < len(data_to_send):
                     sent = self.client.send(data_to_send[totalsent:])
