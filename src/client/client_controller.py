@@ -67,42 +67,36 @@ class ClientController:
     def _send_cursor_updates(self, sock):
         try:
             while True:
-                # time.sleep(0.05) # Giảm sleep để kiểm tra nhanh hơn
-                # Logic ngưỡng vị trí sẽ điều tiết tốc độ gửi (chỉ gửi khi có di chuyển)
-
-                # 1. Kiểm tra cờ chống vòng lặp
                 if time.time() < getattr(self, "_suppress_until", 0):
                     time.sleep(0.01)
                     continue
 
-                # 2. Lấy vị trí con trỏ chuột hiện tại (cục bộ)
                 x, y = self.mouse.position
 
+                # throttle + dedup
                 if (abs(x - self.last_client_x) < config.THRESHOLD_DIST_C and
-                    abs(y - self.last_client_y) < config.THRESHOLD_DIST_C):
-                    # Nếu vị trí không thay đổi đáng kể, bỏ qua gửi.
-                    continue 
+                        abs(y - self.last_client_y) < config.THRESHOLD_DIST_C):
+                    time.sleep(0.05)  # giảm busy-loop
+                    continue
 
-                self.last_client_x = x 
+                self.last_client_x = x
                 self.last_client_y = y
 
-                # 3. Đóng gói JSON
                 msg = json.dumps({
                     "device": "mouse",
                     "type": "cursor_update",
                     "x": int(x),
                     "y": int(y)
                 }) + "\n"
-
-                # 4. Gửi và chờ qua socket
                 try:
-                    sock.sendall(msg.encode("utf-8")) # Gửi vị trí này dưới lệnh "cursor_update" đến Manager
-                except Exception:
-                    # socket có thể đã đóng
+                    sock.sendall(msg.encode("utf-8"))
+                except Exception as e:
+                    print("[CLIENT CONTROLLER] Cursor send error:", e)
                     break
-                # time.sleep(0.2) # Chờ 200ms trước khi cập nhật tiếp theo
-        except Exception:
-            pass
+
+                time.sleep(0.05)  # throttle: 20 updates/sec max
+        except Exception as e:
+            print("[CLIENT CONTROLLER] _send_cursor_updates error:", e)
 
     # ================== Mouse ==================
     def handle_mouse(self, event):

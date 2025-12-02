@@ -136,14 +136,14 @@ class ClientSender:
                         if not self._running: break
                         self.network.send_mcs_pdu(self.channel_screen, frag_bytes)
                         # Sleep cực ngắn để tránh nghẽn socket buffer
-                        # time.sleep(0.0005) 
+                        time.sleep(0.001)
                 else:
                     # Gửi nguyên cục
                     self.network.send_mcs_pdu(self.channel_screen, pdu)
                         
             except Exception as e:
                 print(f"[ClientSender] Lỗi gửi frame: {e}")
-                time.sleep(0.1)
+                time.sleep(0.5)
 
     def send_file(self, filepath: str, chunk_size: int = 32 * 1024):
         if not os.path.exists(filepath):

@@ -4,6 +4,7 @@ import threading
 import socket
 import ssl
 from queue import Queue, Empty
+from time import time
 from common_network.x224_handshake import X224Handshake, CONFIRM_MAGIC
 from common_network.security_layer_tls import create_client_context, client_wrap_socket
 from common_network.pdu_builder import PDUBuilder
@@ -191,16 +192,28 @@ class ClientNetwork:
                 
                 while totalsent < len(data_to_send):
                     sent = self.client.send(data_to_send[totalsent:])
-                    if sent is None or sent <= 0:
-                        raise ConnectionError("SSL socket send failed/blocked")
+                    if sent is None: # Sửa điều kiện kiểm tra
+                        raise ConnectionError("Socket broken")
+                    if sent == 0: 
+                        # Socket đang bận/đầy, không nên throw error ngay
+                        # Chờ xíu rồi thử lại hoặc return để ClientSender gửi lại sau
+                        time.sleep(0.01)
+                        continue
                     totalsent += sent
 
-        except (socket.timeout, ssl.SSLError, ConnectionError) as e:
-            self.logger(f"[ClientNetwork] Lỗi gửi (Timeout/SSL): {e}")
-            self._on_receiver_done() 
+        except (socket.timeout, BlockingIOError):
+            # [SỬA] Đừng ngắt kết nối khi Timeout, chỉ in log và bỏ qua gói này
+            # Video frame sau sẽ bù đắp lại
+            self.logger(f"[ClientNetwork] Socket Busy/Timeout. Bỏ qua gói tin.")
+            return 
+
+        except (ssl.SSLError, ConnectionError) as e:
+            self.logger(f"[ClientNetwork] Lỗi kết nối nghiêm trọng: {e}")
+            self._on_receiver_done() # Chỉ ngắt khi lỗi thực sự nghiêm trọng
+            
         except Exception as e:
             self.logger(f"[ClientNetwork] Lỗi gửi PDU: {e}")
-            self._on_receiver_done()
+            # Có thể không cần ngắt kết nối ở đây tùy vào mức độ lỗi
 
     def send_cursor_pdu(self, x_norm: float, y_norm: float, cursor_shape_bytes: bytes = None):
         """Gửi PDU Cursor tới Server (dùng để chuyển tiếp tới Manager)"""
