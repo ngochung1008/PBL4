@@ -4,9 +4,18 @@ import threading
 from queue import Queue, Empty
 from server0.server_constants import (
     CHANNEL_VIDEO, CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_FILE, CHANNEL_CURSOR,
-    CMD_DISCONNECT
+    CMD_DISCONNECT, CMD_SECURITY_ALERT # <--- [CHECK] Đảm bảo đã có CMD_SECURITY_ALERT ở constants
 )
 from common_network.mcs_layer import MCSLite
+# --- [THÊM] Import Logger để ghi lại vi phạm ---
+try:
+    from server0.server_logger import ServerLogger
+except ImportError:
+    # Fallback nếu bạn chưa tạo file logger, tránh crash server
+    class ServerLogger:
+        @staticmethod
+        def log_alert(cid, v_type, v_msg):
+            print(f"[LOGGER-FALLBACK] {cid} | {v_type} | {v_msg}")
 
 class ServerSession(threading.Thread):
     """
@@ -80,10 +89,35 @@ class ServerSession(threading.Thread):
                         mcs_frame = MCSLite.build(CHANNEL_CURSOR, raw_payload)
                     elif ptype == "control":
                         # (Control) Gửi trên kênh CONTROL
-                        if pdu.get("message") == CMD_DISCONNECT:
+                        msg = pdu.get("message", "")
+
+                        # --- [SỬA] Xử lý các lệnh Control đặc biệt ---
+                        if msg == CMD_DISCONNECT:
                             reason = f"Client {self.client_id} yêu cầu ngắt kết nối."
                             self.running = False
+                        
+                        # --- [THÊM] Bắt lệnh Security Alert để ghi Log ---
+                        elif msg.startswith(CMD_SECURITY_ALERT):
+                            # msg format: "security_alert:Loại vi phạm|Chi tiết"
+                            try:
+                                # Tách nội dung sau dấu hai chấm đầu tiên
+                                content = msg.split(":", 1)[1]
+                                # Tách loại và chi tiết
+                                if "|" in content:
+                                    v_type, v_detail = content.split("|", 1)
+                                else:
+                                    v_type, v_detail = "General", content
+                                
+                                # Ghi vào file log trên Server
+                                ServerLogger.log_alert(self.client_id, v_type, v_detail)
+                                
+                                # Lưu ý: Sau khi log xong, code vẫn chạy xuống dưới 
+                                # để đóng gói mcs_frame và gửi cho Manager (Forwarding)
+                            except Exception as e:
+                                print(f"[Session] Lỗi parse alert: {e}")
+
                         mcs_frame = MCSLite.build(CHANNEL_CONTROL, raw_payload)
+
                     elif ptype == "input":
                         # (Input - ví dụ: keylogger) Gửi trên kênh INPUT
                         mcs_frame = MCSLite.build(CHANNEL_INPUT, raw_payload)

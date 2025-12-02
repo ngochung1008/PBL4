@@ -5,7 +5,13 @@ import time
 import os
 import sys
 
-# Đổi các import
+# [THÊM] Thư viện lấy tiêu đề cửa sổ
+try:
+    import pygetwindow as gw
+except ImportError:
+    print("Lỗi: Thiếu thư viện 'pygetwindow'. Hãy chạy lệnh: pip install pygetwindow")
+    sys.exit(1)
+
 from client.client_network.client_network import ClientNetwork
 from client.client_network.client_sender import ClientSender
 from client.client_screenshot import ClientScreenshot
@@ -43,51 +49,52 @@ class Client:
         self.cursor_tracker = ClientCursorTracker(self.network, fps=30, logger=self.logger)
 
         self.screenshot_thread = None
+        self.monitor_thread = None # [THÊM] Thread giám sát
         self.last_full_frame_ts = 0
-        self.full_frame_interval = 30 # Gửi Full Frame mỗi 30 giây
+        self.full_frame_interval = 30 
 
         # --- Kết nối (Wire) các callback ---
-        
-        # Network nhận PDU -> gọi Input Handler
         self.network.on_input_pdu = self.input_handler.handle_input_pdu
-        
-        # Network nhận PDU -> gọi Control Handler (của lớp này)
         self.network.on_control_pdu = self._on_control_pdu
-        
-        # Network nhận PDU (ACK/NAK) -> gọi Sender
         self.network.on_file_ack = self.sender.handle_file_ack
         self.network.on_file_nak = self.sender.handle_file_nak
-        
-        # Network báo ngắt kết nối -> gọi hàm (của lớp này)
         self.network.on_disconnected = self._on_disconnected
 
     def start(self):
         """Khởi động network và các luồng"""
         self.logger("[Client] Đang khởi động...")
         
-        # Khởi động Network (Connect, TLS, Receiver, PDU loop)
+        # 1. Khởi động Network
         if not self.network.start():
             self.logger("[Client] Không thể kết nối tới server.")
             return False
             
-        # Khởi động Sender (Frame loop, Resend loop)
+        # 2. Khởi động Sender
         self.sender.start()
         
-        # Khởi động Screenshot
+        # 3. Khởi động Screenshot
         self.screenshot.stop = False
-
-        self.screenshot.force_full_frame() # <--- Ép gửi FULL Frame đầu tiên
+        self.screenshot.force_full_frame()
         self.last_full_frame_ts = time.time()
         
         self.screenshot_thread = threading.Thread(
             target=self.screenshot.capture_loop, 
-            args=(self._on_frame,), # Callback là _on_frame
+            args=(self._on_frame,),
             daemon=True
         )
         self.screenshot_thread.start()
+        
+        # 4. Khởi động Cursor Tracker
         self.cursor_tracker.start()
-        self.logger("[Client] Đã khởi động.")
-        self.last_full_frame_ts = time.time()
+
+        # 5. [THÊM] Khởi động Luồng Giám sát (Security Monitor)
+        self.monitor_thread = threading.Thread(
+            target=self._monitor_loop,
+            daemon=True
+        )
+        self.monitor_thread.start()
+
+        self.logger("[Client] Đã khởi động toàn bộ dịch vụ.")
         return True
 
     def stop(self):
@@ -96,39 +103,80 @@ class Client:
         self.cursor_tracker.stop()
         self.sender.stop()
         self.network.stop() # Sẽ kích hoạt _on_disconnected
+        
         if self.screenshot_thread:
             self.screenshot_thread.join(timeout=1.0)
+        # Monitor thread là daemon nên sẽ tự tắt khi main thread tắt
+            
         self.logger("[Client] Đã dừng.")
 
+    # --- [THÊM] HÀM GIÁM SÁT CỬA SỔ ---
+    def _monitor_loop(self):
+        self.logger("[Monitor] Đã bật chế độ giám sát nội dung cửa sổ...")
+        last_title_sent = ""
+        
+        # Danh sách từ khóa đen (Blacklist)
+        # Bạn có thể thêm các từ khóa khác vào đây
+        blacklist_keywords = [
+            "phimmoi", "phim hay", # Web phim lậu
+            "bet88", "w88", "cá cược", "nhà cái", # Web cá độ
+            "xoilac", "trực tiếp bóng đá", # Web bóng đá lậu
+            "sex", "18+" # Web đồi trụy
+        ]
+
+        while self.network.running:
+            try:
+                # Lấy cửa sổ đang active (cửa sổ người dùng đang xem)
+                active_window = gw.getActiveWindow()
+                
+                if active_window:
+                    title = active_window.title.lower()
+                    
+                    # Kiểm tra xem tiêu đề có chứa từ khóa cấm không
+                    is_violation = False
+                    detected_word = ""
+                    
+                    for bad_word in blacklist_keywords:
+                        if bad_word in title:
+                            is_violation = True
+                            detected_word = bad_word
+                            break
+                    
+                    # Nếu phát hiện vi phạm VÀ chưa gửi cảnh báo cho tiêu đề này
+                    if is_violation and title != last_title_sent:
+                        self.logger(f"[Monitor] !!! PHÁT HIỆN VI PHẠM: {title}")
+                        
+                        # Gửi lệnh CMD_SECURITY_ALERT lên Server
+                        # Định dạng: "security_alert:Loại vi phạm|Chi tiết"
+                        msg = f"security_alert:Web Cấm ({detected_word})|Đang truy cập: {active_window.title}"
+                        self.network.send_control_pdu(msg)
+                        
+                        last_title_sent = title # Đánh dấu đã gửi để tránh spam
+                        
+            except Exception as e:
+                # Đôi khi gw.getActiveWindow() bị lỗi permission hoặc ko lấy được handle
+                pass
+            
+            # Kiểm tra mỗi 2 giây để không tốn CPU
+            time.sleep(2)
+
     def _on_frame(self, width, height, jpg_bytes, bbox, img, seq, ts_ms):
-        """
-        Callback từ ClientScreenshot.
-        Gửi frame vào hàng đợi của ClientSender.
-        """
         return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
 
     def _on_control_pdu(self, pdu: dict):
-        """Xử lý PDU control từ server"""
         msg = pdu.get("message", "")
         self.logger(f"[Client] Nhận lệnh từ Server: {msg}")
         
-        # Kiểm tra nếu Server báo "session_started"
         if msg.startswith("session_started"):
             manager_id = msg.split(":")[1] if ":" in msg else "Manager"
-            self.logger(f"[Client] ==> Manager {manager_id} đã kết nối! Đang gửi lại FULL FRAME...")
-            
-            # Kích hoạt cờ force_full để vòng lặp screenshot gửi ảnh gốc ngay lập tức
+            self.logger(f"[Client] ==> Manager {manager_id} đã kết nối! Refresh frame.")
             self.screenshot.force_full_frame()
             
-        # Hoặc nếu bạn implement tính năng Refresh thủ công
         elif msg == "request_refresh":
-            self.logger("[Client] ==> Server yêu cầu làm mới. Gửi Full Frame.")
             self.screenshot.force_full_frame()
         
     def _on_disconnected(self):
-        """Callback từ ClientNetwork khi mất kết nối"""
         self.logger("[Client] _on_disconnected được gọi.")
-        # Dọn dẹp các luồng phụ (Sender, Screenshot)
         self.screenshot.stop = True
         self.cursor_tracker.stop()
         self.sender.stop()
@@ -138,37 +186,27 @@ class Client:
 
 
 if __name__ == "__main__":
-    """
-    Main loop - Xử lý tự động kết nối lại (Auto-Reconnect)
-    """
     host = "10.10.59.122" # Đổi thành IP server của bạn
     port = 5000
     
-    # Tạo vòng lặp để tự động kết nối lại
     while True:
         client = None
         try:
             client = Client(host, port, fps=10) 
+            # Cấu hình screenshot
             client.screenshot.detect_delta = True
             client.screenshot.quality = 65
             
-            # Hàm start() sẽ block cho đến khi kết nối thành công
             if client.start():
-                # Giữ luồng chính sống sót trong khi network đang chạy
                 while client.network.running:
                     time.sleep(1)
             
-            # Nếu client.start() thất bại, hoặc vòng lặp trên kết thúc
-            # (do mất kết nối), code sẽ chạy xuống đây.
-            
         except KeyboardInterrupt:
-            if client:
-                client.stop()
-            break # Thoát vòng lặp while True
+            if client: client.stop()
+            break 
         except Exception as e:
             print(f"Lỗi nghiêm trọng: {e}")
-            if client:
-                client.stop()
+            if client: client.stop()
 
         print("Mất kết nối. Thử kết nối lại sau 5 giây...")
         time.sleep(5)

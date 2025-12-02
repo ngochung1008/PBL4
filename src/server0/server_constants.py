@@ -54,6 +54,7 @@ CMD_REGISTER = "register:"         # Ví dụ: "register:manager"
 CMD_LIST_CLIENTS = "list_clients"  # Manager yêu cầu danh sách client
 CMD_CONNECT_CLIENT = "connect:"    # Manager yêu cầu kết nối: "connect:client_pc_1"
 CMD_DISCONNECT = "disconnect"      # Manager/Client báo ngắt kết nối phiên
+CMD_SECURITY_ALERT = "security_alert" # Cấu trúc: "security_alert:Loại vi phạm|Nội dung chi tiết"
 
 # Server -> Client/Manager
 CMD_REGISTER_OK = "register_ok"   # Ví dụ: "register_ok:manager"
