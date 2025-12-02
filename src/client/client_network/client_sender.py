@@ -95,10 +95,15 @@ class ClientSender:
 
     def stop(self):
         self._running = False
+        current_t = threading.current_thread()
+
         if self._frame_thread and self._frame_thread.is_alive():
-            self._frame_thread.join(timeout=1.0)
+            if self._frame_thread != current_t:
+                self._frame_thread.join(timeout=1.0)
+
         if self._resend_thread and self._resend_thread.is_alive():
-            self._resend_thread.join(timeout=1.0)
+            if self._resend_thread != current_t:
+                self._resend_thread.join(timeout=1.0)
 
     def _frame_sender_loop(self):
         # TPKT Overhead = 4 bytes. MCS Header = 4 bytes. Tổng Header = 8 bytes.

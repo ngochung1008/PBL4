@@ -48,7 +48,7 @@ class ClientNetwork:
         self.on_file_nak = None
         self.on_disconnected = None
 
-    def connect(self, timeout=10.0) -> bool:
+    def connect(self, timeout=20.0) -> bool:
         """Thực hiện kết nối: Raw -> X224 -> TLS"""
         raw_sock = None
         try:
@@ -78,7 +78,7 @@ class ClientNetwork:
                 do_handshake=True
             )
             
-            self.client.settimeout(None) # Chuyển về blocking cho Receiver
+            self.client.settimeout(20.0) # Chuyển về blocking cho Receiver
             self.logger(f"[ClientNetwork] Kết nối TLS thành công tới {self.host}:{self.port}")
             return True
 
@@ -189,19 +189,11 @@ class ClientNetwork:
                 totalsent = 0
                 data_to_send = tpkt_packet
                 
-                # [SỬA LỖI TREO/LAG] Tối ưu: Đặt timeout ngắn cho việc gửi
-                self.client.settimeout(0.5) 
-                
                 while totalsent < len(data_to_send):
                     sent = self.client.send(data_to_send[totalsent:])
-                    
                     if sent is None or sent <= 0:
-                         # Nếu bị chặn/disconnect, thoát loop
-                         raise ConnectionError("SSL socket send failed/blocked")
+                        raise ConnectionError("SSL socket send failed/blocked")
                     totalsent += sent
-                    
-                # [SỬA LỖI] Reset timeout về None (Blocking) cho Receiver
-                self.client.settimeout(None) 
 
         except (socket.timeout, ssl.SSLError, ConnectionError) as e:
             self.logger(f"[ClientNetwork] Lỗi gửi (Timeout/SSL): {e}")

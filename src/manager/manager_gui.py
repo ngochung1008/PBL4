@@ -93,7 +93,7 @@ class ManagerWindow(QMainWindow):
         self.screen_label.installEventFilter(self)
         
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
+        self.last_mouse_sent_time = 0
         self.current_cursor_norm_x = 0.5
         self.current_cursor_norm_y = 0.5
 
@@ -150,21 +150,32 @@ class ManagerWindow(QMainWindow):
         return super().eventFilter(source, event)
 
     def _handle_mouse_move(self, event: QMouseEvent):
-        # Tính toán tọa độ và vẽ con trỏ NGAY LẬP TỨC (Local Feedback)
+        # [THÊM] Logic Throttle (Giới hạn tốc độ gửi)
+        # Chỉ gửi nếu cách lần trước ít nhất 30ms (khoảng 33 FPS)
+        import time
+        now = time.time() * 1000
+        if now - self.last_mouse_sent_time < 30: 
+            # Vẫn cập nhật con trỏ ảo trên màn hình mình cho mượt
+            norm_x, norm_y = self._calculate_norm_coords(event.pos())
+            if norm_x is not None:
+                self._move_cursor_overlay_to_norm(norm_x, norm_y)
+            return # Nhưng KHÔNG GỬI qua mạng
+
+        # Tính toán tọa độ
         norm_x, norm_y = self._calculate_norm_coords(event.pos())
         
         if norm_x is not None:
-            # 1. Cập nhật vị trí con trỏ ảo trên giao diện MÌNH ngay lập tức
             self.current_cursor_norm_x = norm_x
             self.current_cursor_norm_y = norm_y
             self._move_cursor_overlay_to_norm(norm_x, norm_y)
             
-            # 2. Gửi tọa độ qua mạng cho Client
+            # Gửi tọa độ qua mạng
             self.input_event_generated.emit({
                 "type": "mouse_move",
                 "x_norm": norm_x,
                 "y_norm": norm_y
             })
+            self.last_mouse_sent_time = now # Cập nhật thời gian gửi
 
     def _handle_mouse_click(self, event: QMouseEvent, pressed: bool):
         button = "left"

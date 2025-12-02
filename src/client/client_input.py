@@ -41,17 +41,14 @@ class ClientInputHandler:
             norm_y = ev.get("y_norm")
             
             abs_x, abs_y = None, None
-            if norm_x is not None:
+            if norm_x is not None and norm_y is not None:
                 abs_x = int(norm_x * self.screen_width)
-            if norm_y is not None:
                 abs_y = int(norm_y * self.screen_height)
                 
-            # Đảm bảo không click/move ra ngoài màn hình
-            if abs_x is not None:
+                # [QUAN TRỌNG] Kẹp giá trị để không crash pyautogui
+                # Nếu abs_x = screen_width, pyautogui sẽ báo lỗi "out of bounds"
                 abs_x = max(0, min(abs_x, self.screen_width - 1))
-            if abs_y is not None:
                 abs_y = max(0, min(abs_y, self.screen_height - 1))
-            # --- KẾT THÚC NÂNG CẤP ---
 
             if t == "mouse_move":
                 if abs_x is not None and abs_y is not None:
