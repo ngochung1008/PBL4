@@ -19,10 +19,14 @@ class ManageScreenWindow(QWidget):
     close_requested = pyqtSignal()
     input_event_generated = pyqtSignal(dict)
 
-    def __init__(self, client_id: str):
+    def __init__(self, client_id: str, allow_control: bool = False):
         super().__init__()
         self.client_id = client_id
-        self.setWindowTitle(f"Remote Desktop - {client_id}")
+        self.allow_control = allow_control  # True = CONTROL mode, False = VIEW mode
+        
+        # Update window title based on mode
+        mode_text = "Remote Control" if allow_control else "Screen View"
+        self.setWindowTitle(f"{mode_text} - {client_id}")
         self.setMinimumSize(1200, 700)
         self.setStyleSheet(f"background-color: {DARK_BG}; color: {TEXT_LIGHT};")
 
@@ -77,32 +81,28 @@ class ManageScreenWindow(QWidget):
 
         # Top bar
         top_bar = QHBoxLayout()
-        title = QLabel(f"Remote Desktop - {self.client_id}")
+        mode_text = "Remote Control" if self.allow_control else "Screen View (Read Only)"
+        mode_icon = "🎮" if self.allow_control else "👁️"
+        title = QLabel(f"{mode_icon} {mode_text} - {self.client_id}")
         title.setStyleSheet(f"font-size: 16pt; font-weight: bold; color: {TEXT_LIGHT};")
         top_bar.addWidget(title)
 
         top_bar.addStretch()
-
-        disconnect_btn = QPushButton("Disconnect")
-        disconnect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        disconnect_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #ff4444;
-                color: white;
-                border-radius: 8px;
-                padding: 8px 16px;
+        
+        # Mode indicator badge
+        mode_badge = QLabel("CONTROL MODE" if self.allow_control else "VIEW MODE")
+        badge_color = SPOTIFY_GREEN if self.allow_control else "#FFA500"
+        mode_badge.setStyleSheet(f"""
+            QLabel {{
+                background-color: {badge_color};
+                color: black;
+                border-radius: 6px;
+                padding: 6px 12px;
                 font-weight: bold;
-                font-size: 11pt;
-            }}
-            QPushButton:hover {{
-                background-color: #ff6666;
-            }}
-            QPushButton:pressed {{
-                background-color: #cc0000;
+                font-size: 10pt;
             }}
         """)
-        disconnect_btn.clicked.connect(self._on_disconnect_click)
-        top_bar.addWidget(disconnect_btn)
+        top_bar.addWidget(mode_badge)
 
         main_layout.addLayout(top_bar)
 
@@ -194,6 +194,10 @@ class ManageScreenWindow(QWidget):
 
     def handle_mouse_event(self, event: QMouseEvent):
         """Handle mouse events"""
+        # Chỉ xử lý nếu ở CONTROL mode
+        if not self.allow_control:
+            return False  # VIEW mode - không cho phép điều khiển
+        
         print(f"[ManageScreenWindow] 🖱️ Mouse event received, current_client_id={self.current_client_id}")
         
         if not self.current_client_id:
@@ -290,6 +294,11 @@ class ManageScreenWindow(QWidget):
 
     def keyPressEvent(self, event: QKeyEvent):
         """Handle key press events at window level"""
+        # Chỉ xử lý nếu ở CONTROL mode
+        if not self.allow_control:
+            super().keyPressEvent(event)
+            return  # VIEW mode - không cho phép điều khiển
+        
         print(f"[ManageScreenWindow] ⌨️ Key press: {event.key()}, current_client_id={self.current_client_id}")
         
         if not self.current_client_id:
@@ -318,6 +327,11 @@ class ManageScreenWindow(QWidget):
     
     def keyReleaseEvent(self, event: QKeyEvent):
         """Handle key release events at window level"""
+        # Chỉ xử lý nếu ở CONTROL mode
+        if not self.allow_control:
+            super().keyReleaseEvent(event)
+            return  # VIEW mode - không cho phép điều khiển
+        
         if not self.current_client_id:
             super().keyReleaseEvent(event)
             return

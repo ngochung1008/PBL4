@@ -190,6 +190,7 @@ class ManageClientsWindow(QWidget):
 
         # Connect signals
         self.buttons["Screen"].clicked.connect(self.view_screen)
+        self.buttons["Control"].clicked.connect(self.view_control)
         self.buttons["Keylogger"].clicked.connect(self.view_keylogger)
         self.buttons["Security Alerts"].clicked.connect(self.view_security_alerts)
 
@@ -309,13 +310,13 @@ class ManageClientsWindow(QWidget):
         self.close()
             
     def view_screen(self):
-        """Mở màn hình xem client - LOGIC MỚI theo 4 trường hợp"""
+        """Mở màn hình xem client (VIEW MODE - chỉ xem, không điều khiển)"""
         if not self.selected_client_id:
             print(f"[ManageClientsWindow] Chưa chọn client nào!")
             QMessageBox.warning(self, "No Client Selected", "Please select a client first!")
             return
         
-        print(f"[ManageClientsWindow] Mở màn hình cho client: {self.selected_client_id}")
+        print(f"[ManageClientsWindow] 👁️ Mở màn hình VIEW cho client: {self.selected_client_id}")
         
         # Lấy manager logic
         manager = QApplication.instance().manager_logic
@@ -323,38 +324,23 @@ class ManageClientsWindow(QWidget):
             print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
             return
         
-        # Kiểm tra client có trong danh sách từ server không (manager.client_list)
+        # Kiểm tra client có trong danh sách từ server không
         print(f"[ManageClientsWindow] Danh sách client từ server: {manager.client_list}")
         client_ids = [c['id'] for c in manager.client_list]
         if self.selected_client_id not in client_ids:
-            print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách rảnh từ server!")
-            print(f"[ManageClientsWindow] Available clients: {client_ids}")
+            print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách từ server!")
             QMessageBox.warning(self, "Client Not Available", 
-                              f"Client '{self.selected_client_id}' is not available. It may be disconnected or in another session.")
-            return
-        manager = QApplication.instance().manager_logic
-        if not manager:
-            print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
+                              f"Client '{self.selected_client_id}' is not available.")
             return
         
-        # Nếu đã có screen window, chỉ hiện lại
-        if hasattr(self, 'screen_window') and self.screen_window:
-            print(f"[ManageClientsWindow] Screen window đã tồn tại, hiện lại")
-            self.screen_window.show()
-            self.screen_window.raise_()
-            self.screen_window.activateWindow()
-            return
-        
-        # Tạo window mới
-        print(f"[ManageClientsWindow] Tạo screen window mới cho {self.selected_client_id}")
+        # Tạo screen window mới với allow_control=False (VIEW mode)
+        print(f"[ManageClientsWindow] Tạo VIEW screen window cho {self.selected_client_id}")
         from src.manager.gui.manage_screen import ManageScreenWindow
-        self.screen_window = ManageScreenWindow(self.selected_client_id)
+        self.screen_window = ManageScreenWindow(self.selected_client_id, allow_control=False)
         
-        # Connect signals
+        # Connect signals (không có input events vì VIEW mode)
         print(f"[ManageClientsWindow] Kết nối signals với manager logic")
-        self.screen_window.disconnect_requested.connect(self._on_screen_disconnect)
         self.screen_window.close_requested.connect(self._on_screen_close)
-        self.screen_window.input_event_generated.connect(manager._on_gui_input)
         
         manager.session_started.connect(self.screen_window.set_session_started)
         manager.session_ended.connect(self.screen_window.set_session_ended)
@@ -364,55 +350,88 @@ class ManageClientsWindow(QWidget):
         
         self.screen_window.show()
         
-        # Gửi yêu cầu connect nếu chưa có session
-        if not manager.current_session_client_id:
-            print(f"[ManageClientsWindow] Gửi yêu cầu connect tới {self.selected_client_id}")
-            manager.gui_connect_to_client(self.selected_client_id)
-        else:
-            print(f"[ManageClientsWindow] Đã có session với {manager.current_session_client_id}")
-        
-        # QUAN TRỌNG: Không đóng ManageClientsWindow để giữ kết nối
-        # self.close()  # KHÔNG được đóng window này!
+        # Gửi yêu cầu VIEW tới server
+        print(f"[ManageClientsWindow] Gửi yêu cầu VIEW tới {self.selected_client_id}")
+        manager.gui_view_client(self.selected_client_id)
     
-    def _on_screen_disconnect(self):
-        """Handle disconnect button click - CHỈ disconnect session, GIỮ window"""
-        print(f"[ManageClientsWindow] Screen window yêu cầu disconnect (GIỮ window)")
+    def view_control(self):
+        """Mở màn hình điều khiển client (CONTROL MODE - xem và điều khiển)"""
+        if not self.selected_client_id:
+            print(f"[ManageClientsWindow] Chưa chọn client nào!")
+            QMessageBox.warning(self, "No Client Selected", "Please select a client first!")
+            return
         
-        # KHÔNG reset keylog buffer - vì keylog theo session của client, không theo screen session
-        # Buffer chỉ reset khi client disconnect khỏi Main Server
+        print(f"[ManageClientsWindow] 🎮 Mở màn hình CONTROL cho client: {self.selected_client_id}")
         
+        # Lấy manager logic
         manager = QApplication.instance().manager_logic
-        if manager:
-            manager.gui_disconnect_session()
+        if not manager:
+            print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
+            return
+        
+        # Kiểm tra client có trong danh sách từ server không
+        client_ids = [c['id'] for c in manager.client_list]
+        if self.selected_client_id not in client_ids:
+            print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách từ server!")
+            QMessageBox.warning(self, "Client Not Available", 
+                              f"Client '{self.selected_client_id}' is not available.")
+            return
+        
+        # Tạo control window mới với allow_control=True (CONTROL mode)
+        print(f"[ManageClientsWindow] Tạo CONTROL screen window cho {self.selected_client_id}")
+        from src.manager.gui.manage_screen import ManageScreenWindow
+        self.control_window = ManageScreenWindow(self.selected_client_id, allow_control=True)
+        
+        # Connect signals (bao gồm input events)
+        print(f"[ManageClientsWindow] Kết nối signals với manager logic")
+        self.control_window.close_requested.connect(self._on_control_close)
+        self.control_window.input_event_generated.connect(manager._on_gui_input)
+        
+        manager.session_started.connect(self.control_window.set_session_started)
+        manager.session_ended.connect(self.control_window.set_session_ended)
+        manager.video_pdu_received.connect(self.control_window.update_video_frame)
+        manager.cursor_pdu_received.connect(self.control_window.update_cursor_pos)
+        manager.error_received.connect(self.control_window.show_error)
+        
+        self.control_window.show()
+        
+        # Gửi yêu cầu CONTROL tới server
+        print(f"[ManageClientsWindow] Gửi yêu cầu CONTROL tới {self.selected_client_id}")
+        manager.gui_control_client(self.selected_client_id)
     
     def _on_screen_close(self):
-        """Handle close button (X) - Đóng window VÀ disconnect"""
-        print(f"[ManageClientsWindow] ⚠️ Screen window bị đóng - Bắt đầu cleanup...")
-        
-        # KHÔNG reset keylog buffer - vì keylog theo session của client
+        """Handle close button (X) cho VIEW window"""
+        print(f"[ManageClientsWindow] ⚠️ VIEW window bị đóng - Bắt đầu cleanup...")
         
         manager = QApplication.instance().manager_logic
         if manager:
-            # Force cleanup session, không cần check current_session_client_id
-            if manager.current_session_client_id:
-                print(f"[ManageClientsWindow] Force disconnect session: {manager.current_session_client_id}")
-                manager.gui_disconnect_session()
-                # Đợi một chút để disconnect hoàn tất
-                import time
-                time.sleep(0.2)
-            else:
-                print(f"[ManageClientsWindow] Không có session đang active, không cần disconnect")
-            
-            # Force reset current_session_client_id (trong trường hợp server chưa respond)
-            manager.current_session_client_id = None
-            print(f"[ManageClientsWindow] Đã reset current_session_client_id")
+            # Gửi stop_view request
+            print(f"[ManageClientsWindow] Gửi stop_view request")
+            manager.gui_stop_view()
         
         # Cleanup screen window reference
         if hasattr(self, 'screen_window'):
             self.screen_window = None
             print(f"[ManageClientsWindow] Đã cleanup screen_window reference")
         
-        print(f"[ManageClientsWindow] ✅ Cleanup hoàn tất")
+        print(f"[ManageClientsWindow] ✅ VIEW Cleanup hoàn tất")
+    
+    def _on_control_close(self):
+        """Handle close button (X) cho CONTROL window"""
+        print(f"[ManageClientsWindow] ⚠️ CONTROL window bị đóng - Bắt đầu cleanup...")
+        
+        manager = QApplication.instance().manager_logic
+        if manager:
+            # Gửi stop_control request
+            print(f"[ManageClientsWindow] Gửi stop_control request")
+            manager.gui_stop_control()
+        
+        # Cleanup control window reference
+        if hasattr(self, 'control_window'):
+            self.control_window = None
+            print(f"[ManageClientsWindow] Đã cleanup control_window reference")
+        
+        print(f"[ManageClientsWindow] ✅ CONTROL Cleanup hoàn tất")
             
     def update_client_list(self, client_list: list):
         """Update the client list from manager logic"""

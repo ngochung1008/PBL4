@@ -181,21 +181,16 @@ class Manager(QObject):
         self.cursor_pdu_received.emit(pdu) # Gửi thẳng dict PDU lên GUI/Viewer
 
     def gui_connect_to_client(self, client_id: str):
-        print(f"[Manager] gui_connect_to_client được gọi với client_id: {client_id}")
+        """Legacy method - deprecated, use gui_view_client or gui_control_client instead"""
+        print(f"[Manager] gui_connect_to_client (DEPRECATED) được gọi với client_id: {client_id}")
+        # Fallback to view mode
+        self.gui_view_client(client_id)
+    
+    def gui_view_client(self, client_id: str):
+        """Gửi yêu cầu VIEW client (chỉ xem màn hình, không điều khiển)"""
+        print(f"[Manager] 👁️ gui_view_client được gọi với client_id: {client_id}")
         
-        # Nếu đã có session với client này, không làm gì
-        if self.current_session_client_id == client_id:
-            print(f"[Manager] Đã có session với {client_id} rồi, không cần connect lại")
-            return
-        
-        # Nếu đang có session với client KHÁC, disconnect trước
-        if self.current_session_client_id and self.current_session_client_id != client_id:
-            print(f"[Manager] Đang trong phiên với {self.current_session_client_id}. Disconnect trước.")
-            self.gui_disconnect_session()
-            import time
-            time.sleep(0.3)  # Chờ disconnect hoàn tất
-        
-        # Kiểm tra client_id có trong danh sách không (không block nếu không có)
+        # Kiểm tra client_id có trong danh sách không
         client_ids = [c['id'] for c in self.client_list]
         print(f"[Manager] Danh sách client IDs hiện tại: {client_ids}")
         
@@ -206,8 +201,62 @@ class Manager(QObject):
         print(f"[Manager] Đặt session ID dự kiến: {client_id}")
         self.current_session_client_id = client_id 
         
-        print(f"[Manager] Đang gửi yêu cầu kết nối tới client: {client_id}")
-        self.app.connect_to_client(client_id)
+        print(f"[Manager] Đang gửi yêu cầu VIEW tới client: {client_id}")
+        self.app.view_client(client_id)
+    
+    def gui_control_client(self, client_id: str):
+        """Gửi yêu cầu CONTROL client (xem và điều khiển)"""
+        print(f"[Manager] 🎮 gui_control_client được gọi với client_id: {client_id}")
+        
+        # Kiểm tra client_id có trong danh sách không
+        client_ids = [c['id'] for c in self.client_list]
+        print(f"[Manager] Danh sách client IDs hiện tại: {client_ids}")
+        
+        if client_id not in client_ids:
+            print(f"[Manager] Client {client_id} chưa trong danh sách. Vẫn thử kết nối...")
+        
+        # Gán ID ngay lập tức để nhận video frame
+        print(f"[Manager] Đặt session ID dự kiến: {client_id}")
+        self.current_session_client_id = client_id 
+        
+        print(f"[Manager] Đang gửi yêu cầu CONTROL tới client: {client_id}")
+        self.app.control_client(client_id)
+    
+    def gui_stop_view(self):
+        """Dừng VIEW session"""
+        print(f"[Manager] Dừng VIEW session")
+        
+        # Reset session ID
+        self.current_session_client_id = None
+        
+        # Gửi stop_view request
+        try:
+            self.app.stop_view()
+            print(f"[Manager] Đã gửi yêu cầu stop_view tới server")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi gửi stop_view request: {e}")
+        
+        # Emit signal
+        self.session_ended.emit()
+        print(f"[Manager] ✅ Stop view hoàn tất")
+    
+    def gui_stop_control(self):
+        """Dừng CONTROL session"""
+        print(f"[Manager] Dừng CONTROL session")
+        
+        # Reset session ID
+        self.current_session_client_id = None
+        
+        # Gửi stop_control request
+        try:
+            self.app.stop_control()
+            print(f"[Manager] Đã gửi yêu cầu stop_control tới server")
+        except Exception as e:
+            print(f"[Manager] Lỗi khi gửi stop_control request: {e}")
+        
+        # Emit signal
+        self.session_ended.emit()
+        print(f"[Manager] ✅ Stop control hoàn tất")
 
     def gui_disconnect_session(self):
         client_id = self.current_session_client_id

@@ -192,24 +192,34 @@ class ManagerApp:
         self._send_control_pdu(CMD_LIST_CLIENTS)
 
     def connect_to_client(self, client_id: str, mode: str = "control"):
-        """Connect to client with VIEW or CONTROL mode
-        mode: 'view' (1-to-many, screen only) or 'control' (1-to-1, with input)
-        """
-        print(f"[ManagerApp] Yêu cầu {mode.upper()} tới {client_id}...")
-        if mode == "view":
-            self._send_control_pdu(f"{CMD_VIEW_CLIENT}{client_id}")
-        else:  # default to control
-            self._send_control_pdu(f"{CMD_CONTROL_CLIENT}{client_id}")
+        """Legacy method - deprecated"""
+        print(f"[ManagerApp] connect_to_client (DEPRECATED) - use view_client or control_client")
+        self.control_client(client_id)
+    
+    def view_client(self, client_id: str):
+        """Gửi yêu cầu VIEW client (chỉ xem)"""
+        print(f"[ManagerApp] 👁️ Yêu cầu VIEW tới {client_id}...")
+        self._send_control_pdu(f"{CMD_VIEW_CLIENT}{client_id}")
+    
+    def control_client(self, client_id: str):
+        """Gửi yêu cầu CONTROL client (xem và điều khiển)"""
+        print(f"[ManagerApp] 🎮 Yêu cầu CONTROL tới {client_id}...")
+        self._send_control_pdu(f"{CMD_CONTROL_CLIENT}{client_id}")
+    
+    def stop_view(self):
+        """Dừng VIEW session"""
+        print(f"[ManagerApp] Yêu cầu dừng VIEW session...")
+        self._send_control_pdu(CMD_STOP_VIEW)
+    
+    def stop_control(self):
+        """Dừng CONTROL session"""
+        print(f"[ManagerApp] Yêu cầu dừng CONTROL session...")
+        self._send_control_pdu(CMD_STOP_CONTROL)
 
     def disconnect_session(self, mode: str = "control"):
-        """Disconnect from current session
-        mode: 'view' or 'control'
-        """
-        print(f"[ManagerApp] Yêu cầu ngắt kết nối phiên {mode.upper()}...")
-        if mode == "view":
-            self._send_control_pdu(CMD_STOP_VIEW)
-        else:  # default to control
-            self._send_control_pdu(CMD_STOP_CONTROL)
+        """Legacy method - deprecated"""
+        print(f"[ManagerApp] disconnect_session (DEPRECATED) - use stop_view or stop_control")
+        self.stop_control()
 
     def send_input(self, event: dict):
         print(f"[ManagerApp] 📤 Gửi input event: {event.get('type')}")
