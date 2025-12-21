@@ -324,7 +324,27 @@ class ManageClientsWindow(QWidget):
             print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
             return
         
-        # Kiểm tra client có trong danh sách từ server không
+        # CHECK 1: Nếu đã có VIEW window cho client này → show lại, không tạo mới
+        if (hasattr(self, 'screen_window') and self.screen_window and 
+            self.screen_window.client_id == self.selected_client_id):
+            print(f"[ManageClientsWindow] VIEW window cho {self.selected_client_id} đã tồn tại, show lại")
+            self.screen_window.show()
+            self.screen_window.raise_()
+            self.screen_window.activateWindow()
+            return  # Không gửi request mới!
+        
+        # CHECK 2: Nếu đang CONTROL client này → thông báo
+        if (hasattr(self, 'control_window') and self.control_window and 
+            self.control_window.client_id == self.selected_client_id):
+            print(f"[ManageClientsWindow] Đang CONTROL {self.selected_client_id}, không cần VIEW")
+            QMessageBox.information(self, "Already Controlling", 
+                                  f"You are already controlling '{self.selected_client_id}'.\n"
+                                  "No need to open VIEW mode.")
+            self.control_window.show()
+            self.control_window.raise_()
+            return
+        
+        # CHECK 3: Kiểm tra client có trong danh sách từ server không
         print(f"[ManageClientsWindow] Danh sách client từ server: {manager.client_list}")
         client_ids = [c['id'] for c in manager.client_list]
         if self.selected_client_id not in client_ids:
@@ -333,14 +353,30 @@ class ManageClientsWindow(QWidget):
                               f"Client '{self.selected_client_id}' is not available.")
             return
         
-        # Tạo screen window mới với allow_control=False (VIEW mode)
-        print(f"[ManageClientsWindow] Tạo VIEW screen window cho {self.selected_client_id}")
+        # CHECK 4: Nếu đang VIEW/CONTROL client KHÁC → cleanup trước
+        if (manager.current_session_client_id and 
+            manager.current_session_client_id != self.selected_client_id):
+            print(f"[ManageClientsWindow] Đang có session với {manager.current_session_client_id}, cleanup trước")
+            self._cleanup_all_sessions()
+        
+        # Tạo VIEW window mới
+        print(f"[ManageClientsWindow] Tạo VIEW screen window mới cho {self.selected_client_id}")
         from src.manager.gui.manage_screen import ManageScreenWindow
         self.screen_window = ManageScreenWindow(self.selected_client_id, allow_control=False)
         
         # Connect signals (không có input events vì VIEW mode)
         print(f"[ManageClientsWindow] Kết nối signals với manager logic")
         self.screen_window.close_requested.connect(self._on_screen_close)
+        
+        # Disconnect old connections trước khi connect mới (tránh duplicate)
+        try:
+            manager.session_started.disconnect()
+            manager.session_ended.disconnect()
+            manager.video_pdu_received.disconnect()
+            manager.cursor_pdu_received.disconnect()
+            manager.error_received.disconnect()
+        except:
+            pass  # Nếu chưa có connection nào thì bỏ qua
         
         manager.session_started.connect(self.screen_window.set_session_started)
         manager.session_ended.connect(self.screen_window.set_session_ended)
@@ -369,7 +405,31 @@ class ManageClientsWindow(QWidget):
             print(f"[ManageClientsWindow] LỖI: Không tìm thấy manager_logic!")
             return
         
-        # Kiểm tra client có trong danh sách từ server không
+        # CHECK 1: Nếu đã có CONTROL window cho client này → show lại, không tạo mới
+        if (hasattr(self, 'control_window') and self.control_window and 
+            self.control_window.client_id == self.selected_client_id):
+            print(f"[ManageClientsWindow] CONTROL window cho {self.selected_client_id} đã tồn tại, show lại")
+            self.control_window.show()
+            self.control_window.raise_()
+            self.control_window.activateWindow()
+            return  # Không gửi request mới!
+        
+        # CHECK 2: Nếu đang VIEW client này → UPGRADE to CONTROL
+        if (hasattr(self, 'screen_window') and self.screen_window and 
+            self.screen_window.client_id == self.selected_client_id):
+            print(f"[ManageClientsWindow] Đang VIEW {self.selected_client_id}, UPGRADE sang CONTROL")
+            # Đóng VIEW window
+            try:
+                self.screen_window.close()
+            except:
+                pass
+            self.screen_window = None
+            # Gửi stop_view
+            manager.gui_stop_view()
+            import time
+            time.sleep(0.2)  # Chờ stop_view hoàn tất
+        
+        # CHECK 3: Kiểm tra client có trong danh sách từ server không
         client_ids = [c['id'] for c in manager.client_list]
         if self.selected_client_id not in client_ids:
             print(f"[ManageClientsWindow] Client {self.selected_client_id} không có trong danh sách từ server!")
@@ -377,8 +437,14 @@ class ManageClientsWindow(QWidget):
                               f"Client '{self.selected_client_id}' is not available.")
             return
         
-        # Tạo control window mới với allow_control=True (CONTROL mode)
-        print(f"[ManageClientsWindow] Tạo CONTROL screen window cho {self.selected_client_id}")
+        # CHECK 4: Nếu đang VIEW/CONTROL client KHÁC → cleanup trước
+        if (manager.current_session_client_id and 
+            manager.current_session_client_id != self.selected_client_id):
+            print(f"[ManageClientsWindow] Đang có session với {manager.current_session_client_id}, cleanup trước")
+            self._cleanup_all_sessions()
+        
+        # Tạo CONTROL window mới
+        print(f"[ManageClientsWindow] Tạo CONTROL screen window mới cho {self.selected_client_id}")
         from src.manager.gui.manage_screen import ManageScreenWindow
         self.control_window = ManageScreenWindow(self.selected_client_id, allow_control=True)
         
@@ -386,6 +452,16 @@ class ManageClientsWindow(QWidget):
         print(f"[ManageClientsWindow] Kết nối signals với manager logic")
         self.control_window.close_requested.connect(self._on_control_close)
         self.control_window.input_event_generated.connect(manager._on_gui_input)
+        
+        # Disconnect old connections trước khi connect mới (tránh duplicate)
+        try:
+            manager.session_started.disconnect()
+            manager.session_ended.disconnect()
+            manager.video_pdu_received.disconnect()
+            manager.cursor_pdu_received.disconnect()
+            manager.error_received.disconnect()
+        except:
+            pass  # Nếu chưa có connection nào thì bỏ qua
         
         manager.session_started.connect(self.control_window.set_session_started)
         manager.session_ended.connect(self.control_window.set_session_ended)
@@ -398,6 +474,40 @@ class ManageClientsWindow(QWidget):
         # Gửi yêu cầu CONTROL tới server
         print(f"[ManageClientsWindow] Gửi yêu cầu CONTROL tới {self.selected_client_id}")
         manager.gui_control_client(self.selected_client_id)
+    
+    def _cleanup_all_sessions(self):
+        """Cleanup tất cả sessions và windows trước khi tạo session mới"""
+        print(f"[ManageClientsWindow] 🧹 Cleanup all sessions...")
+        
+        manager = QApplication.instance().manager_logic
+        
+        # Cleanup VIEW window nếu có
+        if hasattr(self, 'screen_window') and self.screen_window:
+            try:
+                self.screen_window.close()
+            except:
+                pass
+            self.screen_window = None
+            if manager:
+                manager.gui_stop_view()
+            print(f"[ManageClientsWindow] Cleaned up VIEW window")
+        
+        # Cleanup CONTROL window nếu có
+        if hasattr(self, 'control_window') and self.control_window:
+            try:
+                self.control_window.close()
+            except:
+                pass
+            self.control_window = None
+            if manager:
+                manager.gui_stop_control()
+            print(f"[ManageClientsWindow] Cleaned up CONTROL window")
+        
+        # Chờ một chút để cleanup hoàn tất
+        import time
+        time.sleep(0.2)
+        
+        print(f"[ManageClientsWindow] ✅ Cleanup hoàn tất")
     
     def _on_screen_close(self):
         """Handle close button (X) cho VIEW window"""
