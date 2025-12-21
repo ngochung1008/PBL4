@@ -684,9 +684,21 @@ class SessionManager(threading.Thread):
                 
                 # Thông báo thành công
                 print(f"[ViewSession] 📤 Sending CMD_VIEW_STARTED to manager {manager_id}")
-                self._send_control_pdu(manager_id, f"{CMD_VIEW_STARTED}:{client_id}")
+                try:
+                    self._send_control_pdu(manager_id, f"{CMD_VIEW_STARTED}:{client_id}")
+                    print(f"[ViewSession] ✅ Sent to manager successfully")
+                except Exception as e:
+                    print(f"[ViewSession] ❌ Failed to send to manager: {e}")
+                    return False
+                
                 print(f"[ViewSession] 📤 Sending CMD_VIEW_STARTED to client {client_id}")
-                self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:{manager_id}")
+                try:
+                    self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:{manager_id}")
+                    print(f"[ViewSession] ✅ Sent to client successfully")
+                except Exception as e:
+                    print(f"[ViewSession] ❌ Failed to send to client: {e}")
+                    return False
+                
                 print(f"[ViewSession] ✅ Manager {manager_id} started viewing {client_id}")
                 return True
             else:
