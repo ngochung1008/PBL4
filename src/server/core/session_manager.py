@@ -597,10 +597,15 @@ class SessionManager(threading.Thread):
 
     # Helper để đóng gói và gửi tin nhắn Control
     def _send_control_pdu(self, target_id, message: str):
+        print(f"[SessionManager] _send_control_pdu called: target={target_id}, msg={message[:50]}")
         seq = self._next_seq()
+        print(f"[SessionManager] Building PDU with seq={seq}")
         pdu_bytes = self.builder.build_control_pdu(seq, message.encode())
+        print(f"[SessionManager] Built PDU, size={len(pdu_bytes)}, enqueueing to {target_id}")
         mcs_frame = MCSLite.build(CHANNEL_CONTROL, pdu_bytes)
+        print(f"[SessionManager] MCS frame built, size={len(mcs_frame)}")
         self.broadcaster.enqueue(target_id, mcs_frame)  # Dùng enqueue, không phải send_to_client
+        print(f"[SessionManager] ✅ Enqueued successfully to {target_id}")
     
     # [THÊM] Xử lý INPUT PDU (keylog) - Lưu DB và forward tới manager
     def _handle_input_pdu(self, client_id, pdu):
