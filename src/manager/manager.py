@@ -170,7 +170,9 @@ class Manager(QObject):
         # KHÔNG kiểm tra session nữa - keylog luôn được nhận
         message = pdu.get('message', '')
         print(f"[Manager] 📝 Keylog từ client: {message[:50]}...")  # Log 50 ký tự đầu
+        print(f"[Manager] 🔔 Emitting input_pdu_received signal with pdu={pdu}")
         self.input_pdu_received.emit(pdu)
+        print(f"[Manager] ✅ Signal emitted")
 
     # --- Slots (Hàm được gọi từ GUI) (Giữ nguyên) ---
 

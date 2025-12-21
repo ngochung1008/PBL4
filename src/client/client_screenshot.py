@@ -146,10 +146,12 @@ class ClientScreenshot:
             
             # Nếu đang ở chế độ IDLE, bỏ qua capture và chờ
             if current_mode == self.MODE_IDLE:
+                print(f"[ClientScreenshot] MODE_IDLE - Skipping capture")
                 time.sleep(0.5)
                 continue
             
             start_time = time.perf_counter()
+            print(f"[ClientScreenshot] Capturing frame (mode={current_mode}, fps={current_fps})")
             
             try:
                 # 1. Chụp ảnh màn hình hiện tại

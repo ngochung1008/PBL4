@@ -132,18 +132,22 @@ class ClientBackend:
         - Nếu chỉ đang bị view: VIEW mode (3s/frame)
         - Nếu không có session nào: IDLE mode (không gửi)
         """
+        print(f"[ClientBackend] _update_screenshot_mode: is_being_controlled={self.is_being_controlled}, viewer_count={self.viewer_count}")
         if self.is_being_controlled:
             # Ưu tiên CONTROL mode (mượt mà, liên tục)
             self.screenshot.set_mode(self.screenshot.MODE_CONTROL)
             self.in_session = True
+            print(f"[ClientBackend] ✅ Set CONTROL mode, in_session={self.in_session}")
         elif self.viewer_count > 0:
             # Chỉ VIEW (tiết kiệm băng thông)
             self.screenshot.set_mode(self.screenshot.MODE_VIEW)
             self.in_session = True
+            print(f"[ClientBackend] ✅ Set VIEW mode, in_session={self.in_session}")
         else:
             # Không có session nào
             self.screenshot.set_mode(self.screenshot.MODE_IDLE)
             self.in_session = False
+            print(f"[ClientBackend] ✅ Set IDLE mode, in_session={self.in_session}")
 
     def _monitor_loop(self):
         """Giám sát cửa sổ active và phát hiện vi phạm"""
@@ -188,8 +192,14 @@ class ClientBackend:
             time.sleep(2)
 
     def _on_frame(self, width, height, jpg_bytes, bbox, img, seq, ts_ms):
+        print(f"[ClientBackend] _on_frame called: in_session={self.in_session}, size={len(jpg_bytes)}, seq={seq}")
         if self.in_session:
-            return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
+            result = self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
+            print(f"[ClientBackend] ✅ Frame enqueued: {result}")
+            return result
+        else:
+            print(f"[ClientBackend] ⚠️ Frame skipped (not in session)")
+            return False
 
     def _on_control_pdu(self, pdu: dict):
         msg = pdu.get("message", "")
