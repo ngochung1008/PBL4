@@ -14,6 +14,11 @@ except AttributeError:
 
 
 class ClientScreenshot:
+    # Capture modes
+    MODE_VIEW = "view"      # View-only mode: 3 giây/frame (tiết kiệm băng thông)
+    MODE_CONTROL = "control"  # Control mode: Continuous (30 FPS cho smooth)
+    MODE_IDLE = "idle"       # Idle mode: Không gửi (chưa có session)
+    
     def __init__(self, fps=0.2, quality=85, max_dimension=1920, detect_delta=False):
         """
         fps: Frame per second (0.2 = 1 frame mỗi 5 giây, 0.33 = 1 frame mỗi 3 giây)
@@ -34,6 +39,11 @@ class ClientScreenshot:
         self._lock = threading.Lock()
         self.FULL_FRAME_INTERVAL = 60.0 # Gửi full frame mỗi 60 giây
         self.last_full_frame_ts = 0.0
+        
+        # Mode control: VIEW (3s/frame) vs CONTROL (continuous)
+        self.mode = self.MODE_IDLE
+        self.fps_view = 0.33  # ~3 giây/frame cho VIEW mode
+        self.fps_control = 30  # 30 FPS cho CONTROL mode (smooth)
 
     def _resize_if_needed(self, img):
         w, h = img.size
@@ -102,12 +112,43 @@ class ClientScreenshot:
     def force_full_frame(self):
         with self._lock:
             self._force_full = True
+    
+    def set_mode(self, mode):
+        """Đặt chế độ capture: VIEW, CONTROL, hoặc IDLE"""
+        with self._lock:
+            old_mode = self.mode
+            self.mode = mode
+            
+            # Cập nhật FPS dựa trên mode
+            if mode == self.MODE_VIEW:
+                self.fps = self.fps_view  # 3 giây/frame
+                print(f"[ClientScreenshot] 👁️ Chuyển sang VIEW mode (3s/frame)")
+            elif mode == self.MODE_CONTROL:
+                self.fps = self.fps_control  # 30 FPS
+                print(f"[ClientScreenshot] 🎮 Chuyển sang CONTROL mode (30 FPS - continuous)")
+            elif mode == self.MODE_IDLE:
+                print(f"[ClientScreenshot] 💤 Chuyển sang IDLE mode (không gửi)")
+            
+            # Force full frame khi chuyển mode
+            if old_mode != mode:
+                self._force_full = True
 
     def capture_loop(self, callback):
-        interval = 1.0 / self.fps
         print(f"[ClientScreenshot] Bắt đầu capture loop (Hybrid Mode: Full + Rect)...")
 
         while not self.stop:
+            # Cập nhật interval dựa trên mode hiện tại
+            with self._lock:
+                current_mode = self.mode
+                current_fps = self.fps
+            
+            interval = 1.0 / current_fps if current_fps > 0 else 1.0
+            
+            # Nếu đang ở chế độ IDLE, bỏ qua capture và chờ
+            if current_mode == self.MODE_IDLE:
+                time.sleep(0.5)
+                continue
+            
             start_time = time.perf_counter()
             
             try:

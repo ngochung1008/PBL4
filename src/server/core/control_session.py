@@ -13,6 +13,7 @@ class ControlSession(threading.Thread):
     - Manager gửi input (mouse/keyboard) → Client
     - Client gửi video/cursor → Manager
     - Chỉ 1 manager có thể control 1 client tại 1 thời điểm
+    - Client capture màn hình liên tục (30 FPS) để đảm bảo mượt mà khi điều khiển
     """
     def __init__(self, manager_id, client_id, broadcaster, done_callback):
         self.session_id = f"CTRL:{manager_id}::{client_id}"

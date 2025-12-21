@@ -62,9 +62,9 @@ class SessionManager(threading.Thread):
         self.authenticated_users = {} # { client_id -> username } (Chỉ user đã login thành công)
         
         # Quản lý Phiên mới: Tách VIEW và CONTROL
-        # VIEW: 1 client có thể có nhiều viewers (1-nhiều)
+        # VIEW: 1 client có thể có nhiều viewers (1-nhiều) - Chỉ xem màn hình (3s/frame)
         self.view_sessions = {}      # { client_id -> ViewSession }
-        # CONTROL: 1 client chỉ có 1 controller (1-1 exclusive)
+        # CONTROL: 1 client chỉ có 1 controller (1-1 exclusive) - Xem và điều khiển (continuous 30 FPS)
         self.control_sessions = {}   # { client_id -> ControlSession }
         # Mapping để biết manager nào đang trong session nào
         self.manager_sessions = {}   # { manager_id -> {"view": [client_ids], "control": client_id} }

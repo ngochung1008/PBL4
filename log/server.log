@@ -892,3 +892,10 @@
 2025-12-22 00:59:56,970 - src.server.server - INFO - Starting Auth Server in separate thread
 2025-12-22 00:59:56,971 - src.server.server - INFO - Auth Server thread started
 2025-12-22 00:59:56,973 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-22 01:12:27,855 - src.server.server - INFO - 
+================================================================================
+2025-12-22 01:12:27,857 - src.server.server - INFO - Shutdown signal received
+2025-12-22 01:12:27,859 - src.server.server - INFO - ================================================================================
+2025-12-22 01:12:27,861 - src.server.server - INFO - Stopping Main Server...
+2025-12-22 01:12:27,869 - src.server.server - INFO - Main Server stopped
+2025-12-22 01:12:27,871 - src.server.server - INFO - Server shutdown complete

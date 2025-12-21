@@ -56,7 +56,9 @@ class ClientBackend:
         self.full_frame_interval = 30 
         
         # Track session state
-        self.in_session = False 
+        self.in_session = False
+        self.viewer_count = 0      # Số lượng managers đang xem
+        self.is_being_controlled = False  # Có manager đang điều khiển không
 
         # Kết nối các callback
         self.network.on_input_pdu = self.input_handler.handle_input_pdu
@@ -122,6 +124,26 @@ class ClientBackend:
             self.screenshot_thread.join(timeout=1.0)
             
         self.logger("[ClientBackend] Đã dừng.")
+    
+    def _update_screenshot_mode(self):
+        """
+        Cập nhật chế độ screenshot dựa trên session hiện tại:
+        - Nếu đang bị control: CONTROL mode (30 FPS - continuous)
+        - Nếu chỉ đang bị view: VIEW mode (3s/frame)
+        - Nếu không có session nào: IDLE mode (không gửi)
+        """
+        if self.is_being_controlled:
+            # Ưu tiên CONTROL mode (mượt mà, liên tục)
+            self.screenshot.set_mode(self.screenshot.MODE_CONTROL)
+            self.in_session = True
+        elif self.viewer_count > 0:
+            # Chỉ VIEW (tiết kiệm băng thông)
+            self.screenshot.set_mode(self.screenshot.MODE_VIEW)
+            self.in_session = True
+        else:
+            # Không có session nào
+            self.screenshot.set_mode(self.screenshot.MODE_IDLE)
+            self.in_session = False
 
     def _monitor_loop(self):
         """Giám sát cửa sổ active và phát hiện vi phạm"""
@@ -173,7 +195,40 @@ class ClientBackend:
         msg = pdu.get("message", "")
         self.logger(f"[ClientBackend] Nhận lệnh từ Server: {msg}")
         
-        if msg.startswith("session_started"):
+        # === Xử lý VIEW SESSION ===
+        if msg.startswith("view_started"):
+            # Format: "view_started:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.viewer_count += 1
+            self.logger(f"[ClientBackend] 👁️ Manager {manager_id} đã bắt đầu xem. Tổng viewers: {self.viewer_count}")
+            self._update_screenshot_mode()
+            self.screenshot.force_full_frame()
+            
+        elif msg.startswith("view_stopped"):
+            # Format: "view_stopped:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.viewer_count = max(0, self.viewer_count - 1)
+            self.logger(f"[ClientBackend] 👁️ Manager {manager_id} đã dừng xem. Còn lại: {self.viewer_count}")
+            self._update_screenshot_mode()
+        
+        # === Xử lý CONTROL SESSION ===
+        elif msg.startswith("control_started"):
+            # Format: "control_started:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.is_being_controlled = True
+            self.logger(f"[ClientBackend] 🎮 Manager {manager_id} đã bắt đầu điều khiển!")
+            self._update_screenshot_mode()
+            self.screenshot.force_full_frame()
+            
+        elif msg.startswith("control_stopped"):
+            # Format: "control_stopped:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.is_being_controlled = False
+            self.logger(f"[ClientBackend] 🎮 Manager {manager_id} đã dừng điều khiển.")
+            self._update_screenshot_mode()
+        
+        # === Xử lý LEGACY SESSION (deprecated) ===
+        elif msg.startswith("session_started"):
             manager_id = msg.split(":")[1] if ":" in msg else "Manager"
             self.logger(f"[ClientBackend] ==> Manager {manager_id} đã kết nối! Bắt đầu gửi video.")
             self.in_session = True

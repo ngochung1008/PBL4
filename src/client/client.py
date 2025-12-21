@@ -88,6 +88,9 @@ class Client:
         
         # Track session state
         self.in_session = False
+        self.viewer_count = 0      # Số lượng managers đang xem
+        self.is_being_controlled = False  # Có manager đang điều khiển không
+        
         # Tách riêng screen sharing và remote control
         self.screen_sharing_enabled = True  # Có thể bật/tắt screen sharing
         self.remote_control_enabled = True  # Remote control luôn bật khi in_session 
@@ -467,6 +470,26 @@ class Client:
             if seq % 100 == 0:  # Mỗi 100 frame in 1 lần
                 self.logger(f"[Client] ⚠️ KHÔNG gửi frame vì chưa có session (in_session={self.in_session})")
 
+    def _update_screenshot_mode(self):
+        """
+        Cập nhật chế độ screenshot dựa trên session hiện tại:
+        - Nếu đang bị control: CONTROL mode (30 FPS - continuous)
+        - Nếu chỉ đang bị view: VIEW mode (3s/frame)
+        - Nếu không có session nào: IDLE mode (không gửi)
+        """
+        if self.is_being_controlled:
+            # Ưu tiên CONTROL mode (mượt mà, liên tục)
+            self.screenshot.set_mode(self.screenshot.MODE_CONTROL)
+            self.in_session = True
+        elif self.viewer_count > 0:
+            # Chỉ VIEW (tiết kiệm băng thông)
+            self.screenshot.set_mode(self.screenshot.MODE_VIEW)
+            self.in_session = True
+        else:
+            # Không có session nào
+            self.screenshot.set_mode(self.screenshot.MODE_IDLE)
+            self.in_session = False
+
     def _on_control_pdu(self, pdu: dict):
         msg = pdu.get("message", "")
         self.logger(f"[Client] Nhận lệnh từ Server: {msg}")
@@ -476,46 +499,61 @@ class Client:
             
         elif msg.startswith("login_fail"):
             self.logger("[Client] Đăng nhập thất bại!")
+        
+        # === Xử lý VIEW SESSION (Mới - nhiều manager có thể xem) ===
+        elif msg.startswith("view_started"):
+            # Format: "view_started:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.viewer_count += 1
+            self.logger(f"[Client] 👁️ Manager {manager_id} đã bắt đầu xem. Tổng viewers: {self.viewer_count}")
+            self._update_screenshot_mode()
+            self.screenshot.force_full_frame()
             
-        # Xử lý lệnh SESSION cũ (legacy)
+        elif msg.startswith("view_stopped"):
+            # Format: "view_stopped:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.viewer_count = max(0, self.viewer_count - 1)
+            self.logger(f"[Client] 👁️ Manager {manager_id} đã dừng xem. Còn lại: {self.viewer_count}")
+            self._update_screenshot_mode()
+        
+        # === Xử lý CONTROL SESSION (Mới - 1 manager điều khiển) ===
+        elif msg.startswith("control_started"):
+            # Format: "control_started:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.is_being_controlled = True
+            self.remote_control_enabled = True  # Bật điều khiển từ xa
+            self.logger(f"[Client] 🎮 Manager {manager_id} đã bắt đầu điều khiển!")
+            self._update_screenshot_mode()
+            self.screenshot.force_full_frame()
+            
+        elif msg.startswith("control_stopped"):
+            # Format: "control_stopped:manager_id"
+            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
+            self.is_being_controlled = False
+            self.remote_control_enabled = False  # Tắt điều khiển từ xa
+            self.logger(f"[Client] 🎮 Manager {manager_id} đã dừng điều khiển.")
+            self._update_screenshot_mode()
+        
+        # === Xử lý LEGACY SESSION (deprecated) ===
         elif msg.startswith("session_started"):
             manager_id = msg.split(":")[1] if ":" in msg else "Manager"
             self.logger(f"[Client] ==> Manager {manager_id} đã kết nối! Bắt đầu gửi video.")
             self.in_session = True
-            self.screenshot.force_full_frame()
-        
-        # Xử lý lệnh VIEW mới (chỉ xem màn hình)
-        elif msg.startswith("view_started"):
-            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
-            self.logger(f"[Client] ==> Manager {manager_id} đang xem màn hình (VIEW mode)")
-            self.in_session = True
-            self.screenshot.force_full_frame()
-        
-        # Xử lý lệnh CONTROL mới (xem + điều khiển)
-        elif msg.startswith("control_started"):
-            manager_id = msg.split(":")[1] if ":" in msg else "Manager"
-            self.logger(f"[Client] ==> Manager {manager_id} đang điều khiển (CONTROL mode)")
-            self.in_session = True
-            self.remote_control_enabled = True  # Bật điều khiển từ xa
             self.screenshot.force_full_frame()
             
         elif msg == "session_ended":
             self.logger("[Client] Session ended")
             self.in_session = False
         
-        # Xử lý kết thúc VIEW
         elif msg.startswith("view_ended"):
-            self.logger("[Client] VIEW session ended")
-            # Kiểm tra còn viewer nào khác không
-            # Nếu không còn viewer và không có controller, tắt session
-            if not self.in_session:  # Nếu không còn session nào
+            self.logger("[Client] VIEW session ended (legacy)")
+            if not self.in_session:
                 self.in_session = False
         
-        # Xử lý kết thúc CONTROL
         elif msg.startswith("control_ended"):
-            self.logger("[Client] CONTROL session ended")
+            self.logger("[Client] CONTROL session ended (legacy)")
             self.in_session = False
-            self.remote_control_enabled = False  # Tắt điều khiển từ xa
+            self.remote_control_enabled = False
             
         elif msg == "request_refresh":
             if self.in_session:
