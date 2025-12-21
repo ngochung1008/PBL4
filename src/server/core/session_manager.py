@@ -266,17 +266,9 @@ class SessionManager(threading.Thread):
                             control_session.enqueue_pdu(client_id, pdu)
             
             elif pdu_type == "control":
-                # Control command
-                with self.lock:
-                    # Nếu đang trong control session, forward
-                    if client_id in self.manager_sessions and self.manager_sessions[client_id]["control"]:
-                        target_client_id = self.manager_sessions[client_id]["control"]
-                        if target_client_id in self.control_sessions:
-                            control_session = self.control_sessions[target_client_id]
-                            control_session.enqueue_pdu(client_id, pdu)
-                    else:
-                        # Không trong session, xử lý như command
-                        self.pdu_queue.put((client_id, pdu))
+                # Control commands from manager → ALWAYS handled by SessionManager
+                # NEVER forward control PDUs to client (they're for server logic only)
+                self.pdu_queue.put((client_id, pdu))
             
             else:
                 # File transfer, etc.

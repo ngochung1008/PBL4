@@ -97,8 +97,9 @@ class ControlSession(threading.Thread):
                         # Input control (mouse/keyboard)
                         mcs_frame = MCSLite.build(CHANNEL_INPUT, raw_payload)
                     elif ptype == "control":
-                        # Control command
-                        mcs_frame = MCSLite.build(CHANNEL_CONTROL, raw_payload)
+                        # Control commands should be handled by SessionManager, NOT forwarded here
+                        # Skip forwarding control PDUs from manager
+                        continue
                     elif ptype not in ("full", "rect", "cursor"):
                         # File transfer
                         mcs_frame = MCSLite.build(CHANNEL_FILE, raw_payload)
