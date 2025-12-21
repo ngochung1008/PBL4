@@ -734,6 +734,8 @@ class SessionManager(threading.Thread):
         """
         Dừng tất cả VIEW sessions của manager
         """
+        # Lấy thông tin và update state TRONG lock
+        clients_to_notify = []
         with self.lock:
             if manager_id not in self.manager_sessions:
                 return
@@ -750,34 +752,42 @@ class SessionManager(threading.Thread):
                         del self.view_sessions[client_id]
                         print(f"[ViewSession] Deleted ViewSession for {client_id} (no viewers)")
                     
-                    # Thông báo
-                    self._send_control_pdu(manager_id, f"{CMD_VIEW_STOPPED}:{client_id}")
-                    self._send_control_pdu(client_id, f"{CMD_VIEW_STOPPED}:{manager_id}")
+                    # Lưu lại để gửi message BÊN NGOÀI lock
+                    clients_to_notify.append(client_id)
             
             # Clear danh sách view của manager
             self.manager_sessions[manager_id]["view"] = []
+        
+        # Gửi message BÊN NGOÀI lock để tránh deadlock
+        for client_id in clients_to_notify:
+            print(f"[ViewSession] 📤 Sending view_stopped to manager {manager_id}")
+            self._send_control_pdu(manager_id, f"{CMD_VIEW_STOPPED}:{client_id}")
+            print(f"[ViewSession] 📤 Sending view_stopped to client {client_id}")
+            self._send_control_pdu(client_id, f"{CMD_VIEW_STOPPED}:{manager_id}")
     
     def _start_control_session(self, manager_id, client_id):
         """
         Bắt đầu CONTROL session: Manager điều khiển Client (1-1 exclusive)
         Chỉ 1 manager có thể control 1 client tại 1 thời điểm
         """
+        # Kiểm tra và validate TRONG lock
+        error_msg = None
         with self.lock:
             # Kiểm tra client có tồn tại không
             if client_id not in self.clients:
-                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Client không tồn tại")
-                return False
-            
+                error_msg = f"{CMD_ERROR}:Client không tồn tại"
             # Kiểm tra client đã bị control bởi người khác chưa
-            if client_id in self.control_sessions:
+            elif client_id in self.control_sessions:
                 existing_controller = self.control_sessions[client_id].manager_id
-                self._send_control_pdu(manager_id, f"{CMD_CONTROL_DENIED}:Client đang bị điều khiển bởi {existing_controller}")
-                return False
-            
+                error_msg = f"{CMD_CONTROL_DENIED}:Client đang bị điều khiển bởi {existing_controller}"
             # Kiểm tra manager đã đang control client khác chưa
-            if manager_id in self.manager_sessions and self.manager_sessions[manager_id]["control"]:
-                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Bạn đang điều khiển client khác")
-                return False
+            elif manager_id in self.manager_sessions and self.manager_sessions[manager_id]["control"]:
+                error_msg = f"{CMD_ERROR}:Bạn đang điều khiển client khác"
+        
+        # Gửi error message BÊN NGOÀI lock
+        if error_msg:
+            self._send_control_pdu(manager_id, error_msg)
+            return False
         
         # Tạo ControlSession (1-1 exclusive)
         print(f"[ControlSession] Starting: Manager({manager_id}) <-> Client({client_id})")
@@ -792,7 +802,7 @@ class SessionManager(threading.Thread):
                 self.manager_sessions[manager_id] = {"view": [], "control": None}
             self.manager_sessions[manager_id]["control"] = client_id
         
-        # Thông báo thành công
+        # Thông báo thành công BÊN NGOÀI lock
         self._send_control_pdu(manager_id, f"{CMD_CONTROL_STARTED}:{client_id}")
         self._send_control_pdu(client_id, f"{CMD_CONTROL_STARTED}:{manager_id}")
         
