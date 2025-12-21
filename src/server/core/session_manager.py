@@ -673,50 +673,62 @@ class SessionManager(threading.Thread):
         Bắt đầu VIEW session: Manager xem màn hình Client (không điều khiển)
         Nhiều manager có thể view cùng 1 client
         """
+        # Kiểm tra và cập nhật state TRONG lock
         with self.lock:
             # Kiểm tra client có tồn tại không
             if client_id not in self.clients:
-                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Client không tồn tại")
-                return False
-            
-            # Lấy hoặc tạo ViewSession cho client này
-            if client_id not in self.view_sessions:
-                self.view_sessions[client_id] = ViewSession(client_id, self.broadcaster)
-            
-            view_session = self.view_sessions[client_id]
-            
-            # Thêm manager vào danh sách viewers
-            if view_session.add_viewer(manager_id):
-                # Cập nhật manager_sessions
-                if manager_id not in self.manager_sessions:
-                    self.manager_sessions[manager_id] = {"view": [], "control": None}
-                if client_id not in self.manager_sessions[manager_id]["view"]:
-                    self.manager_sessions[manager_id]["view"].append(client_id)
-                
-                # Thông báo thành công
-                print(f"[ViewSession] 📤 Sending CMD_VIEW_STARTED to manager {manager_id}")
-                try:
-                    self._send_control_pdu(manager_id, f"{CMD_VIEW_STARTED}:{client_id}")
-                    print(f"[ViewSession] ✅ Sent to manager successfully")
-                except BaseException as e:
-                    print(f"[ViewSession] ❌ Failed to send to manager: {type(e).__name__}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    return False
-                
-                print(f"[ViewSession] 📤 Sending CMD_VIEW_STARTED to client {client_id}")
-                try:
-                    self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:{manager_id}")
-                    print(f"[ViewSession] ✅ Sent to client successfully")
-                except Exception as e:
-                    print(f"[ViewSession] ❌ Failed to send to client: {e}")
-                    return False
-                
-                print(f"[ViewSession] ✅ Manager {manager_id} started viewing {client_id}")
-                return True
+                # Release lock trước khi gọi _send_control_pdu để tránh deadlock
+                pass  # Will send error outside lock
             else:
-                self._send_control_pdu(manager_id, f"{CMD_ERROR}:Đã đang view client này")
-                return False
+                # Lấy hoặc tạo ViewSession cho client này
+                if client_id not in self.view_sessions:
+                    self.view_sessions[client_id] = ViewSession(client_id, self.broadcaster)
+                
+                view_session = self.view_sessions[client_id]
+                
+                # Thêm manager vào danh sách viewers
+                if not view_session.add_viewer(manager_id):
+                    # Already viewing - will send error outside lock
+                    pass
+                else:
+                    # Success - update manager_sessions
+                    if manager_id not in self.manager_sessions:
+                        self.manager_sessions[manager_id] = {"view": [], "control": None}
+                    if client_id not in self.manager_sessions[manager_id]["view"]:
+                        self.manager_sessions[manager_id]["view"].append(client_id)
+        
+        # Gửi message BÊN NGOÀI lock để tránh deadlock
+        # Check lại kết quả sau khi release lock
+        if client_id not in self.clients:
+            self._send_control_pdu(manager_id, f"{CMD_ERROR}:Client không tồn tại")
+            return False
+        
+        view_session = self.view_sessions.get(client_id)
+        if not view_session or not view_session.is_viewing(manager_id):
+            self._send_control_pdu(manager_id, f"{CMD_ERROR}:Đã đang view client này")
+            return False
+        
+        # Thông báo thành công
+        print(f"[ViewSession] 📤 Sending CMD_VIEW_STARTED to manager {manager_id}")
+        try:
+            self._send_control_pdu(manager_id, f"{CMD_VIEW_STARTED}:{client_id}")
+            print(f"[ViewSession] ✅ Sent to manager successfully")
+        except BaseException as e:
+            print(f"[ViewSession] ❌ Failed to send to manager: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        
+        print(f"[ViewSession] 📤 Sending CMD_VIEW_STARTED to client {client_id}")
+        try:
+            self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:{manager_id}")
+            print(f"[ViewSession] ✅ Sent to client successfully")
+        except Exception as e:
+            print(f"[ViewSession] ❌ Failed to send to client: {e}")
+            return False
+        
+        print(f"[ViewSession] ✅ Manager {manager_id} started viewing {client_id}")
+        return True
     
     def _stop_view_session(self, manager_id):
         """
