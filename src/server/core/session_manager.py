@@ -814,6 +814,9 @@ class SessionManager(threading.Thread):
         """
         Dừng CONTROL session của manager
         """
+        # Lấy thông tin và cleanup TRONG lock
+        client_id = None
+        control_session = None
         with self.lock:
             if manager_id not in self.manager_sessions:
                 return
@@ -822,11 +825,27 @@ class SessionManager(threading.Thread):
             if not client_id:
                 return
             
-            # Tìm và dừng ControlSession
+            # Lấy control session
             if client_id in self.control_sessions:
                 control_session = self.control_sessions[client_id]
-                control_session.stop()
-                # _on_control_session_done sẽ được gọi tự động
+                del self.control_sessions[client_id]
+                print(f"[ControlSession] Stopping: Manager({manager_id}) <-> Client({client_id})")
+            
+            # Clear manager control
+            self.manager_sessions[manager_id]["control"] = None
+        
+        # Dừng session và gửi message BÊN NGOÀI lock
+        if control_session:
+            control_session.stop()
+        
+        if client_id:
+            print(f"[ControlSession] 📤 Sending control_stopped to manager {manager_id}")
+            self._send_control_pdu(manager_id, f"{CMD_CONTROL_STOPPED}:{client_id}")
+            print(f"[ControlSession] 📤 Sending control_stopped to client {client_id}")
+            self._send_control_pdu(client_id, f"{CMD_CONTROL_STOPPED}:{manager_id}")
+        
+        # Cập nhật danh sách client (client không còn bị control)
+        self._broadcast_client_list()
     
     def _on_control_session_done(self, control_session, reason):
         """

@@ -232,10 +232,12 @@ class ClientBackend:
             
         elif msg.startswith("control_stopped"):
             # Format: "control_stopped:manager_id"
+            print(f"[ClientBackend] 🎮 Received CONTROL_STOPPED: {msg}")
             manager_id = msg.split(":")[1] if ":" in msg else "Manager"
             self.is_being_controlled = False
             self.logger(f"[ClientBackend] 🎮 Manager {manager_id} đã dừng điều khiển.")
             self._update_screenshot_mode()
+            print(f"[ClientBackend] ✅ Control stopped processed, is_being_controlled={self.is_being_controlled}, viewer_count={self.viewer_count}")
         
         # === Xử lý LEGACY SESSION (deprecated) ===
         elif msg.startswith("session_started"):
