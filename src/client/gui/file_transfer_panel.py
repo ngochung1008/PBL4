@@ -245,14 +245,20 @@ class ClientFileTransferPanel(QWidget):
         # Target ID = "server" (server sẽ forward đến manager hiện tại)
         target_id = "server"
         
-        # Hiển thị trạng thái đang gửi
+        # Lưu tên file trước khi reset
         filename = os.path.basename(self.selected_file)
-        self.status_label.setStyleSheet("color: #FFA500; font-size: 11pt; padding: 8px; font-weight: bold;")
-        self.status_label.setText(f"⏳ Đang gửi: {filename}...")
-        self.send_btn.setEnabled(False)
         
-        # Emit signal
+        # Emit signal để gửi file
         self.file_send_requested.emit(target_id, self.selected_file)
+        
+        # Hiển thị thành công ngay lập tức
+        self.status_label.setStyleSheet("color: #1DB954; font-size: 11pt; padding: 8px; font-weight: bold;")
+        self.status_label.setText(f"✅ Đã gửi: {filename}")
+        
+        # Reset form
+        self.file_label.setText("No file selected")
+        self.selected_file = None
+        self.send_btn.setEnabled(False)
         
     def update_progress(self, progress: int):
         """Cập nhật trạng thái gửi file"""
