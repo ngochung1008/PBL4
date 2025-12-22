@@ -1130,18 +1130,25 @@ class ClientWindow(QWidget):
         self.log_message(f"[GUI] File send error: {error_msg}")
     
     def on_file_received(self, filename: str, filepath: str):
-        """File received callback"""
+        """File received callback - called from network thread, needs thread-safe GUI update"""
         print(f"[ClientWindow] ===== FILE RECEIVED CALLBACK =====")
         print(f"[ClientWindow] Filename: {filename}")
         print(f"[ClientWindow] Filepath: {filepath}")
         print(f"[ClientWindow] File exists: {os.path.exists(filepath)}")
         
-        if hasattr(self, 'file_transfer_panel'):
-            self.file_transfer_panel.add_received_file(filename)
-            print(f"[ClientWindow] Added to file transfer panel")
+        # Schedule GUI update on main thread
+        from PyQt6.QtCore import QMetaObject, Qt
         
-        self.log_message(f"[GUI] ✅ File received: {filename} at {filepath}")
-        QMessageBox.information(self, "File Received", f"Received file: {filename}\n\nSaved to: {filepath}")
+        def update_gui():
+            if hasattr(self, 'file_transfer_panel'):
+                self.file_transfer_panel.add_received_file(filename)
+                print(f"[ClientWindow] Added to file transfer panel")
+            
+            self.log_message(f"[GUI] ✅ File received: {filename} at {filepath}")
+            QMessageBox.information(self, "File Received", f"Received file: {filename}\n\nSaved to: {filepath}")
+        
+        # Invoke on main thread
+        QMetaObject.invokeMethod(self, update_gui, Qt.ConnectionType.QueuedConnection)
     
     def closeEvent(self, event):
         """Xử lý sự kiện đóng cửa sổ"""

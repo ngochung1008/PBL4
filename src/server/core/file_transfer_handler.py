@@ -76,10 +76,13 @@ class FileTransferHandler:
                     # Tạo file PDU: [metadata_len(4bytes)][metadata][file_data]
                     file_pdu_body = struct.pack('>I', metadata_len) + metadata_bytes + complete_file
                     
-                    # Build MCS frame with channel header + PDU body
-                    mcs_frame = session_manager.builder._channel_hdr(CHANNEL_FILE) + \
-                                session_manager.builder._hdr(session_manager._next_seq(), 5, 0) + \
-                                file_pdu_body
+                    # Build PDU with header
+                    pdu_header = session_manager.builder._hdr(session_manager._next_seq(), 5, 0)  # 5 = PDU type for file
+                    full_pdu = pdu_header + file_pdu_body
+                    
+                    # Build MCS frame (channel_header + PDU)
+                    from src.common.network.mcs_layer import MCSLite
+                    mcs_frame = MCSLite.build(CHANNEL_FILE, full_pdu)
                     
                     # Gửi file tới receiver using enqueue
                     print(f"[FileTransfer] Sending file PDU to {receiver_id}, size: {len(mcs_frame)} bytes")

@@ -12,14 +12,14 @@ from typing import Optional, Callable
 class ClientFileTransfer:
     """Quản lý việc gửi và nhận file cho client"""
     
-    def __init__(self, sender, receiver):
+    def __init__(self, sender, logger=None):
         """
         Args:
             sender: ClientSender instance để gửi file
-            receiver: ClientReceiver instance để nhận callback
+            logger: Logger function (optional)
         """
         self.sender = sender
-        self.receiver = receiver
+        self.logger = logger or print
         self.on_file_received = None  # Callback khi nhận file (filename, filepath)
         self.on_progress = None  # Callback progress (int)
         self.on_complete = None  # Callback khi gửi xong ()
@@ -46,8 +46,7 @@ class ClientFileTransfer:
         """
         if not os.path.exists(filepath):
             print(f"[ClientFileTransfer] File không tồn tại: {filepath}")
-            if self.on_error:
-                self.on_error("File không tồn tại")
+            self._call_error_callback("File không tồn tại")
             return False
         
         try:
@@ -84,8 +83,7 @@ class ClientFileTransfer:
             
         except Exception as e:
             print(f"[ClientFileTransfer] Error sending file: {e}")
-            if self.on_error:
-                self.on_error(str(e))
+            self._call_error_callback(str(e))
             return False
     
     def handle_file_transfer_ack(self, message: str):
@@ -194,8 +192,9 @@ class ClientFileTransfer:
             
             print(f"[ClientFileTransfer] File saved: {save_path}")
             
-            # Callback
+            # Callback - use thread-safe invocation
             if self.on_file_received:
+                # Call directly if no GUI context, otherwise caller should handle thread safety
                 self.on_file_received(safe_filename, save_path)
             
         except Exception as e:
@@ -250,6 +249,21 @@ class ClientFileTransfer:
             traceback.print_exc()
             if self.on_error:
                 self.on_error(f"Error receiving file: {e}")
+    
+    def _call_progress_callback(self, progress: int):
+        """Thread-safe progress callback"""
+        if self.on_progress:
+            self.on_progress(progress)
+    
+    def _call_complete_callback(self):
+        """Thread-safe complete callback"""
+        if self.on_complete:
+            self.on_complete()
+    
+    def _call_error_callback(self, error_msg: str):
+        """Thread-safe error callback"""
+        if self.on_error:
+            self.on_error(error_msg)
     
     def handle_transfer_complete(self, transfer_id: str, filename: str):
         """Xử lý thông báo transfer hoàn thành"""
