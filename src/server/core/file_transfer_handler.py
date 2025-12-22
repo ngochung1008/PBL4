@@ -20,13 +20,17 @@ class FileTransferHandler:
         """
         try:
             pdu_type = pdu.get("type", "")
+            print(f"[FileTransfer] ===== RECEIVED FILE PDU =====")
+            print(f"[FileTransfer] From: {sender_id}, Type: {pdu_type}")
             
             # Xử lý file_chunk PDU (format mới từ PDUBuilder)
             if pdu_type == "file_chunk":
                 file_data = pdu.get("data", b"")  # Data đã được parse
+                print(f"[FileTransfer] file_chunk data size: {len(file_data) if file_data else 0}")
             else:
                 # Legacy format hoặc raw payload
                 file_data = pdu.get("_raw_payload")  # Raw bytes
+                print(f"[FileTransfer] raw_payload size: {len(file_data) if file_data else 0}")
             
             if not file_data:
                 print(f"[FileTransfer] No file data in PDU from {sender_id}, type={pdu_type}")
@@ -34,6 +38,7 @@ class FileTransferHandler:
             
             # Kiểm tra xem có pending transfer không
             with session_manager.lock:
+                print(f"[FileTransfer] Pending transfers: {list(session_manager.pending_file_transfers.keys())}")
                 if sender_id not in session_manager.pending_file_transfers:
                     print(f"[FileTransfer] No pending transfer for {sender_id}")
                     return
