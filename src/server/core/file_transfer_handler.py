@@ -19,10 +19,17 @@ class FileTransferHandler:
         Nhận các chunks của file và forward tới receiver
         """
         try:
-            # Lấy file data từ PDU
-            file_data = pdu.get("_raw_payload")  # Raw bytes
+            pdu_type = pdu.get("type", "")
+            
+            # Xử lý file_chunk PDU (format mới từ PDUBuilder)
+            if pdu_type == "file_chunk":
+                file_data = pdu.get("data", b"")  # Data đã được parse
+            else:
+                # Legacy format hoặc raw payload
+                file_data = pdu.get("_raw_payload")  # Raw bytes
+            
             if not file_data:
-                print(f"[FileTransfer] No file data in PDU from {sender_id}")
+                print(f"[FileTransfer] No file data in PDU from {sender_id}, type={pdu_type}")
                 return
             
             # Kiểm tra xem có pending transfer không
@@ -73,20 +80,33 @@ class FileTransferHandler:
                     metadata_bytes = json.dumps(metadata).encode('utf-8')
                     metadata_len = len(metadata_bytes)
                     
-                    # Tạo file PDU: [metadata_len(4bytes)][metadata][file_data]
-                    file_pdu_body = struct.pack('>I', metadata_len) + metadata_bytes + complete_file
+                    # Tạo file data với metadata prefix: [metadata_len(4bytes)][metadata][file_data]
+                    file_data_with_metadata = struct.pack('>I', metadata_len) + metadata_bytes + complete_file
                     
-                    # Build PDU with header
-                    pdu_header = session_manager.builder._hdr(session_manager._next_seq(), 5, 0)  # 5 = PDU type for file
-                    full_pdu = pdu_header + file_pdu_body
-                    
-                    # Build MCS frame (channel_header + PDU)
+                    # Gửi qua file chunks với proper PDU format
+                    from src.common.network.pdu_builder import PDUBuilder
                     from src.common.network.mcs_layer import MCSLite
-                    mcs_frame = MCSLite.build(CHANNEL_FILE, full_pdu)
+                    from src.common.network.tpkt_layer import TPKTLayer
                     
-                    # Gửi file tới receiver using enqueue
-                    print(f"[FileTransfer] Sending file PDU to {receiver_id}, size: {len(mcs_frame)} bytes")
-                    session_manager.broadcaster.enqueue(receiver_id, mcs_frame)
+                    chunk_size = 64 * 1024  # 64KB chunks
+                    total_sent = 0
+                    seq = session_manager._next_seq()
+                    
+                    while total_sent < len(file_data_with_metadata):
+                        chunk = file_data_with_metadata[total_sent:total_sent + chunk_size]
+                        
+                        # Build proper FILE_CHUNK PDU
+                        file_chunk_pdu = PDUBuilder.build_file_chunk(seq, total_sent, chunk)
+                        seq += 1
+                        
+                        # Build MCS frame
+                        mcs_frame = MCSLite.build(CHANNEL_FILE, file_chunk_pdu)
+                        
+                        # Gửi tới receiver
+                        session_manager.broadcaster.enqueue(receiver_id, mcs_frame)
+                        total_sent += len(chunk)
+                    
+                    print(f"[FileTransfer] Sent file to {receiver_id}, total size: {len(file_data_with_metadata)} bytes")
                     
                     # Update database
                     session_manager.file_transfer_manager.complete_transfer(transfer_id)

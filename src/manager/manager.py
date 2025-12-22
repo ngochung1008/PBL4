@@ -48,6 +48,10 @@ class Manager(QObject):
         
         # File Transfer
         self.file_transfer = ManagerFileTransfer(self.app)
+        
+        # Buffer để nhận file chunks
+        self.receiving_chunks = []
+        self.receiving_total_size = 0
         self._setup_file_transfer_callbacks()
         
         self.current_session_client_id = None
@@ -158,10 +162,30 @@ class Manager(QObject):
     def _on_file_pdu(self, pdu: dict):
         """Xử lý file PDU từ server"""
         try:
-            # Parse file PDU
             import struct
             import json
             
+            pdu_type = pdu.get('type')
+            print(f"[Manager] ===== Received FILE PDU =====")
+            print(f"[Manager] PDU type: {pdu_type}")
+            
+            # Xử lý file_chunk PDU (format mới)
+            if pdu_type == 'file_chunk':
+                chunk_data = pdu.get('data', b'')
+                offset = pdu.get('offset', 0)
+                
+                if chunk_data:
+                    print(f"[Manager] Received chunk at offset {offset}, size: {len(chunk_data)} bytes")
+                    
+                    # Thêm chunk vào buffer
+                    self.receiving_chunks.append((offset, chunk_data))
+                    self.receiving_total_size += len(chunk_data)
+                    
+                    # Thử lắp ráp file
+                    self._try_complete_file_from_chunks()
+                return
+            
+            # Legacy format: raw_payload
             raw_payload = pdu.get('_raw_payload')
             if not raw_payload:
                 print(f"[Manager] No raw_payload in file PDU")
@@ -188,6 +212,59 @@ class Manager(QObject):
             print(f"[Manager] Error handling file PDU: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _try_complete_file_from_chunks(self):
+        """Thử lắp ráp file từ các chunks đã nhận"""
+        import struct
+        import json
+        
+        if not self.receiving_chunks:
+            return
+        
+        # Sắp xếp chunks theo offset
+        sorted_chunks = sorted(self.receiving_chunks, key=lambda x: x[0])
+        
+        # Ghép tất cả chunks
+        complete_data = b''.join([chunk for _, chunk in sorted_chunks])
+        
+        # Kiểm tra có metadata không (4 bytes đầu là metadata_len)
+        if len(complete_data) < 4:
+            return  # Chưa đủ data
+        
+        try:
+            metadata_len = struct.unpack('>I', complete_data[:4])[0]
+            
+            # Kiểm tra đã nhận đủ metadata + file_data chưa
+            if len(complete_data) < 4 + metadata_len:
+                return  # Chưa đủ data
+            
+            metadata_bytes = complete_data[4:4+metadata_len]
+            file_data = complete_data[4+metadata_len:]
+            
+            metadata = json.loads(metadata_bytes.decode('utf-8'))
+            expected_filesize = metadata.get('filesize', 0)
+            
+            print(f"[Manager] Parsed metadata: {metadata}")
+            print(f"[Manager] Expected filesize: {expected_filesize}, received: {len(file_data)}")
+            
+            # Kiểm tra đã nhận đủ file chưa
+            if len(file_data) >= expected_filesize:
+                # Đã nhận đủ → lưu file
+                print(f"[Manager] File complete! Saving...")
+                
+                # Lấy đúng kích thước file (không lấy padding)
+                file_data = file_data[:expected_filesize]
+                
+                self.file_transfer.handle_file_received(metadata, file_data)
+                
+                # Reset buffer
+                self.receiving_chunks = []
+                self.receiving_total_size = 0
+                
+        except (struct.error, json.JSONDecodeError) as e:
+            # Có thể chưa nhận đủ metadata, tiếp tục chờ
+            print(f"[Manager] Waiting for more chunks... ({e})")
+            pass
     
     def _setup_file_transfer_callbacks(self):
         """Setup callbacks cho file transfer"""
@@ -414,7 +491,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "10.10.49.186"
+    HOST = "10.10.58.126"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 

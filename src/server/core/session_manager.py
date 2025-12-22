@@ -281,7 +281,7 @@ class SessionManager(threading.Thread):
                         # Không có session, xử lý như control command
                         self.pdu_queue.put((client_id, pdu))
             
-            elif pdu_type == "file":
+            elif pdu_type == "file" or pdu_type in ("file_chunk", "file_start", "file_end"):
                 # File data PDU → Xử lý file transfer
                 FileTransferHandler.handle_file_pdu(self, client_id, pdu)
             
@@ -308,7 +308,7 @@ class SessionManager(threading.Thread):
                 # NEVER forward control PDUs to client (they're for server logic only)
                 self.pdu_queue.put((client_id, pdu))
             
-            elif pdu_type == "file":
+            elif pdu_type == "file" or pdu_type in ("file_chunk", "file_start", "file_end"):
                 # File data PDU → Xử lý file transfer
                 FileTransferHandler.handle_file_pdu(self, client_id, pdu)
             

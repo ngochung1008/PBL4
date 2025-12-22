@@ -32,6 +32,10 @@ class ClientFileTransfer:
         # Active transfers
         self.active_sends = {}  # {transfer_id: file_info}
         self.lock = threading.Lock()
+        
+        # Receiving file chunks buffer
+        self.receiving_chunks = []  # Buffer để lắp ráp các chunks
+        self.receiving_total_size = 0  # Tổng bytes đã nhận
     
     def send_file(self, target_id: str, filepath: str) -> bool:
         """
@@ -131,24 +135,30 @@ class ClientFileTransfer:
         # Gửi file data qua CHANNEL_FILE
         try:
             from src.client.client_constants import CHANNEL_FILE
+            from src.common.network.pdu_builder import PDUBuilder
             
             # Chia file thành chunks nếu cần
             chunk_size = 64 * 1024  # 64KB chunks
             total_sent = 0
             chunk_num = 0
+            seq = 1  # Sequence number cho PDU
             
             while total_sent < len(file_data):
                 chunk = file_data[total_sent:total_sent + chunk_size]
                 
-                # Gửi chunk qua FILE channel - dùng send_mcs_pdu
-                self.sender.network.send_mcs_pdu(CHANNEL_FILE, chunk)
+                # Build proper FILE_CHUNK PDU với header đúng
+                file_chunk_pdu = PDUBuilder.build_file_chunk(seq, total_sent, chunk)
+                seq += 1
+                
+                # Gửi chunk qua FILE channel
+                self.sender.network.send_mcs_pdu(CHANNEL_FILE, file_chunk_pdu)
                 
                 total_sent += len(chunk)
                 chunk_num += 1
                 
                 # Report progress
+                progress = int(total_sent * 100 / len(file_data))
                 if self.on_progress:
-                    progress = int(total_sent * 100 / len(file_data))
                     self.on_progress(progress)
                 
                 print(f"[ClientFileTransfer] Sent chunk {chunk_num}: {total_sent}/{len(file_data)} bytes ({progress}%)")
@@ -207,46 +217,113 @@ class ClientFileTransfer:
             pdu: Dict chứa file data từ server
         """
         try:
+            pdu_type = pdu.get('type')
             print(f"[ClientFileTransfer] ===== Received FILE PDU =====")
-            print(f"[ClientFileTransfer] PDU keys: {list(pdu.keys())}")
-            print(f"[ClientFileTransfer] PDU type: {pdu.get('type')}")
+            print(f"[ClientFileTransfer] PDU type: {pdu_type}")
             
-            # Kiểm tra các format khác nhau của PDU
-            # Format 1: {'data': bytes, 'metadata': {...}}
-            # Format 2: {'type': 'file_chunk', 'data': bytes, ...}
-            # Format 3: Raw bytes trong pdu
+            # Xử lý file_chunk PDU
+            if pdu_type == 'file_chunk':
+                chunk_data = pdu.get('data', b'')
+                offset = pdu.get('offset', 0)
+                
+                if chunk_data:
+                    print(f"[ClientFileTransfer] Received chunk at offset {offset}, size: {len(chunk_data)} bytes")
+                    
+                    with self.lock:
+                        # Thêm chunk vào buffer
+                        self.receiving_chunks.append((offset, chunk_data))
+                        self.receiving_total_size += len(chunk_data)
+                    
+                    # Kiểm tra nếu đây là chunk đầu tiên (offset=0) → chứa metadata
+                    if offset == 0:
+                        # Thử parse metadata từ chunk đầu tiên
+                        self._try_complete_file_from_chunks()
+                    else:
+                        # Thử lắp ráp file nếu đã nhận đủ chunks
+                        self._try_complete_file_from_chunks()
+                return
             
+            # Legacy format support
             file_data = None
             metadata = {}
             
-            # Thử lấy data từ các key khác nhau
             if 'data' in pdu:
                 file_data = pdu.get('data', b'')
                 metadata = pdu.get('metadata', {})
             elif '_raw_payload' in pdu:
-                # PDU có raw payload - cần parse
                 raw = pdu.get('_raw_payload', b'')
                 if len(raw) > 0:
                     file_data = raw
-                    # Thử parse metadata từ pdu khác
                     metadata = {
                         'filename': pdu.get('filename', 'received_file'),
                         'sender_id': pdu.get('sender_id', 'unknown')
                     }
             
             if file_data and len(file_data) > 0:
-                print(f"[ClientFileTransfer] Received file data: {len(file_data)} bytes")
-                # Nhận và lưu file
+                print(f"[ClientFileTransfer] Received file data (legacy): {len(file_data)} bytes")
                 self.handle_file_received(metadata, file_data)
             else:
-                print(f"[ClientFileTransfer] No file data in PDU or empty data")
-                print(f"[ClientFileTransfer] Full PDU content: {pdu}")
+                print(f"[ClientFileTransfer] No file data in PDU")
                 
         except Exception as e:
             print(f"[ClientFileTransfer] Error handling file PDU: {e}")
             import traceback
             traceback.print_exc()
             self._call_error_callback(f"Error receiving file: {e}")
+    
+    def _try_complete_file_from_chunks(self):
+        """Thử lắp ráp file từ các chunks đã nhận"""
+        import struct
+        import json
+        
+        with self.lock:
+            if not self.receiving_chunks:
+                return
+            
+            # Sắp xếp chunks theo offset
+            sorted_chunks = sorted(self.receiving_chunks, key=lambda x: x[0])
+            
+            # Ghép tất cả chunks
+            complete_data = b''.join([chunk for _, chunk in sorted_chunks])
+            
+            # Kiểm tra có metadata không (4 bytes đầu là metadata_len)
+            if len(complete_data) < 4:
+                return  # Chưa đủ data
+            
+            try:
+                metadata_len = struct.unpack('>I', complete_data[:4])[0]
+                
+                # Kiểm tra đã nhận đủ metadata + file_data chưa
+                if len(complete_data) < 4 + metadata_len:
+                    return  # Chưa đủ data
+                
+                metadata_bytes = complete_data[4:4+metadata_len]
+                file_data = complete_data[4+metadata_len:]
+                
+                metadata = json.loads(metadata_bytes.decode('utf-8'))
+                expected_filesize = metadata.get('filesize', 0)
+                
+                print(f"[ClientFileTransfer] Parsed metadata: {metadata}")
+                print(f"[ClientFileTransfer] Expected filesize: {expected_filesize}, received: {len(file_data)}")
+                
+                # Kiểm tra đã nhận đủ file chưa
+                if len(file_data) >= expected_filesize:
+                    # Đã nhận đủ → lưu file
+                    print(f"[ClientFileTransfer] File complete! Saving...")
+                    
+                    # Lấy đúng kích thước file (không lấy padding)
+                    file_data = file_data[:expected_filesize]
+                    
+                    self.handle_file_received(metadata, file_data)
+                    
+                    # Reset buffer
+                    self.receiving_chunks = []
+                    self.receiving_total_size = 0
+                    
+            except (struct.error, json.JSONDecodeError) as e:
+                # Có thể chưa nhận đủ metadata, tiếp tục chờ
+                print(f"[ClientFileTransfer] Waiting for more chunks... ({e})")
+                pass
     
     def _call_progress_callback(self, progress: int):
         """Thread-safe progress callback"""
