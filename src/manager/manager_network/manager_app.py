@@ -155,6 +155,11 @@ class ManagerApp:
             if self.on_input_pdu:
                 self.on_input_pdu(pdu)
                 
+        elif ptype == "file":
+            # File data PDU
+            if self.on_file_pdu:
+                self.on_file_pdu(pdu)
+        
         elif ptype.startswith("file_"):
             if self.on_file_pdu:
                 self.on_file_pdu(pdu)
@@ -227,3 +232,11 @@ class ManagerApp:
         pdu = self.builder.build_input_pdu(seq, event)
         print(f"[ManagerApp] PDU được build: seq={seq}, size={len(pdu)} bytes")
         self._send_mcs_pdu(CHANNEL_INPUT, pdu)
+    def send_control_message(self, message: str):
+        """G?i control message t?i server"""
+        print(f"[ManagerApp] ?? G?i control message: {message[:100]}")
+        self._send_control_pdu(message)
+    
+    def next_seq(self):
+        """Public method d? l?y sequence number"""
+        return self._next_seq()

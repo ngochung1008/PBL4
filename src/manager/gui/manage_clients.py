@@ -193,6 +193,7 @@ class ManageClientsWindow(QWidget):
         self.buttons["Control"].clicked.connect(self.view_control)
         self.buttons["Keylogger"].clicked.connect(self.view_keylogger)
         self.buttons["Security Alerts"].clicked.connect(self.view_security_alerts)
+        self.buttons["File Transfer"].clicked.connect(self.view_file_transfer)
 
         self.action_area = QTextEdit()
         self.action_area.setPlaceholderText("Action output will appear here...")
@@ -878,6 +879,70 @@ class ManageClientsWindow(QWidget):
             print(f"[ManageClientsWindow] ✅ Đã ghi log vi phạm vào file: {log_filename}")
         except Exception as e:
             print(f"[ManageClientsWindow] ❌ Lỗi ghi file log: {e}")
+    
+    def view_file_transfer(self):
+        """Hiển thị giao diện file transfer"""
+        if not self.selected_client_id:
+            self.action_area.append("⚠️ Vui lòng chọn client trước!")
+            return
+        
+        # Import file transfer panel
+        from src.manager.gui.file_transfer_panel import ManagerFileTransferPanel
+        
+        # Clear action area và thêm file transfer panel
+        self.action_area.clear()
+        self.action_area.hide()
+        
+        # Tạo file transfer panel nếu chưa có
+        if not hasattr(self, 'file_transfer_panel'):
+            self.file_transfer_panel = ManagerFileTransferPanel(self)
+            
+            # Connect signals
+            self.file_transfer_panel.file_send_requested.connect(self.handle_file_send)
+            
+            # Connect manager signals
+            manager = QApplication.instance().manager_logic
+            if manager:
+                manager.file_received.connect(self.file_transfer_panel.add_received_file)
+                manager.file_send_progress.connect(self.file_transfer_panel.update_send_progress)
+                manager.file_send_complete.connect(lambda filename: 
+                    self.file_transfer_panel.status_label.setText(f"✅ Đã gửi: {filename}"))
+                manager.file_send_error.connect(self.file_transfer_panel.show_error)
+        
+        # Set selected client
+        self.file_transfer_panel.set_client(self.selected_client_id)
+        
+        # Add panel to layout
+        # Find the right_layout and add the panel
+        right_panel = self.action_area.parent()
+        if right_panel:
+            layout = right_panel.layout()
+            if layout:
+                # Remove action_area từ layout nếu có
+                layout.removeWidget(self.action_area)
+                # Add file transfer panel
+                layout.addWidget(self.file_transfer_panel, stretch=1)
+                self.file_transfer_panel.show()
+        
+        print(f"[ManageClientsWindow] 📁 Hiển thị file transfer cho client: {self.selected_client_id}")
+    
+    def handle_file_send(self, target_client_id, filepath):
+        """Handle file send request từ file transfer panel"""
+        try:
+            manager = QApplication.instance().manager_logic
+            if manager:
+                success = manager.gui_send_file(target_client_id, filepath)
+                if not success:
+                    if hasattr(self, 'file_transfer_panel'):
+                        self.file_transfer_panel.show_error("Không thể gửi file")
+            else:
+                print("[ManageClientsWindow] ❌ manager_logic không tồn tại")
+        except Exception as e:
+            print(f"[ManageClientsWindow] ❌ Lỗi gửi file: {e}")
+            import traceback
+            traceback.print_exc()
+            if hasattr(self, 'file_transfer_panel'):
+                self.file_transfer_panel.show_error(str(e))
             
 # def main():
 #     app = QApplication(sys.argv)

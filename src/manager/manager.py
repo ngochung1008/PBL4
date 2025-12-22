@@ -21,6 +21,7 @@ from src.manager.gui.manager_gui import ManagerWindow
 from src.manager.manager_input import ManagerInputHandler
 from src.manager.manager_viewer import ManagerViewer
 from src.manager.manager_constants import CA_FILE
+from src.manager.manager_file_transfer import ManagerFileTransfer
 
 class Manager(QObject): 
     
@@ -33,6 +34,10 @@ class Manager(QObject):
     cursor_pdu_received = pyqtSignal(object)
     input_pdu_received = pyqtSignal(object)  # Keylog data
     security_alert_received = pyqtSignal(object)  # Security alerts
+    file_received = pyqtSignal(str, str, str)  # filename, filepath, sender_id
+    file_send_progress = pyqtSignal(int)  # progress percentage
+    file_send_complete = pyqtSignal(str)  # filename
+    file_send_error = pyqtSignal(str)  # error message
 
     def __init__(self, host: str, port: int, manager_id: str = "manager1", username: str = None, password: str = None):
         super().__init__()
@@ -40,6 +45,10 @@ class Manager(QObject):
         self.app = ManagerApp(host, port, manager_id, username, password)
         self.input_handler = ManagerInputHandler(self.app)
         self.viewer = ManagerViewer()
+        
+        # File Transfer
+        self.file_transfer = ManagerFileTransfer(self.app)
+        self._setup_file_transfer_callbacks()
         
         self.current_session_client_id = None
         self.client_list = []
@@ -147,10 +156,71 @@ class Manager(QObject):
             traceback.print_exc()
         
     def _on_file_pdu(self, pdu: dict):
-        ptype = pdu.get("type")
-        if ptype == "file_start":
-            print(f"[Manager] {self.current_session_client_id} đang gửi file: {pdu.get('filename')}")
-        
+        """Xử lý file PDU từ server"""
+        try:
+            # Parse file PDU
+            import struct
+            import json
+            
+            raw_payload = pdu.get('_raw_payload')
+            if not raw_payload:
+                print(f"[Manager] No raw_payload in file PDU")
+                return
+            
+            # Extract metadata and file data
+            # Format: [metadata_len(4bytes)][metadata_json][file_data]
+            if len(raw_payload) < 4:
+                print(f"[Manager] Invalid file PDU: too short")
+                return
+            
+            metadata_len = struct.unpack('>I', raw_payload[:4])[0]
+            metadata_bytes = raw_payload[4:4+metadata_len]
+            file_data = raw_payload[4+metadata_len:]
+            
+            metadata = json.loads(metadata_bytes.decode('utf-8'))
+            
+            print(f"[Manager] Received file: {metadata.get('filename')} from {metadata.get('sender_id')}")
+            
+            # Pass to file transfer handler
+            self.file_transfer.handle_file_received(metadata, file_data)
+            
+        except Exception as e:
+            print(f"[Manager] Error handling file PDU: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _setup_file_transfer_callbacks(self):
+        """Setup callbacks cho file transfer"""
+        self.file_transfer.on_file_received = self._on_file_received_callback
+        self.file_transfer.on_file_send_progress = self._on_file_send_progress_callback
+        self.file_transfer.on_file_send_complete = self._on_file_send_complete_callback
+        self.file_transfer.on_file_send_error = self._on_file_send_error_callback
+    
+    def _on_file_received_callback(self, filename, filepath, sender_id):
+        """Callback khi nhận được file"""
+        print(f"[Manager] ✅ File received: {filename} from {sender_id}")
+        self.file_received.emit(filename, filepath, sender_id)
+    
+    def _on_file_send_progress_callback(self, progress):
+        """Callback cập nhật progress khi gửi file"""
+        print(f"[Manager] 📤 Send progress: {progress}%")
+        self.file_send_progress.emit(progress)
+    
+    def _on_file_send_complete_callback(self, filename):
+        """Callback khi gửi file hoàn thành"""
+        print(f"[Manager] ✅ File sent: {filename}")
+        self.file_send_complete.emit(filename)
+    
+    def _on_file_send_error_callback(self, error_msg):
+        """Callback khi có lỗi gửi file"""
+        print(f"[Manager] ❌ Send error: {error_msg}")
+        self.file_send_error.emit(error_msg)
+    
+    def gui_send_file(self, target_client_id: str, filepath: str):
+        """Gửi file tới client"""
+        print(f"[Manager] Sending file {filepath} to {target_client_id}")
+        return self.file_transfer.send_file(target_client_id, filepath)
+    
     def _on_control_pdu(self, pdu: dict):
         msg = pdu.get('message', '')
         print(f"[Manager] Control PDU từ client: {msg}")
