@@ -137,18 +137,13 @@ class ScreenshotStorage:
             Đường dẫn file đã lưu hoặc None nếu không lưu
         """
         try:
-            print(f"[ScreenshotStorage] 🔍 Received frame from {client_name}, size: {len(raw_payload)} bytes")
-            
             # Parse header để lấy type
             if len(raw_payload) < 14:  # Share header = 14 bytes
-                print(f"[ScreenshotStorage] ⚠️ Payload too short: {len(raw_payload)} bytes")
                 return None
             
             # Read header: seq (4), timestamp (8), type (1), flags (1)
             seq, ts_ms, ptype, flags = struct.unpack_from(">IQBB", raw_payload)
             offset = 14
-            
-            print(f"[ScreenshotStorage] Frame details: seq={seq}, type={ptype} ({'FULL' if ptype == 1 else 'RECT' if ptype == 2 else 'UNKNOWN'})")
             
             # XỬ LÝ FULL FRAME (type = 1)
             if ptype == 1:
@@ -199,10 +194,20 @@ class ScreenshotStorage:
                 
                 jpg_data = raw_payload[offset:offset + jpg_len]
                 
-                # Kiểm tra có base image không
+                # GIẢI PHÁP: Lưu RECT frame độc lập (không cần base image)
+                # Vì mục đích giám sát, ta chỉ cần lưu các frame thay đổi
+                # Không nhất thiết phải ghép thành ảnh hoàn chỉnh
+                
+                # Kiểm tra có base image không - nếu có thì ghép, không có thì lưu riêng
                 if client_name not in self.client_base_images:
-                    print(f"[ScreenshotStorage] No base image for {client_name}, skipping RECT")
-                    return None
+                    print(f"[ScreenshotStorage] No base image for {client_name}, saving RECT independently")
+                    # Lưu RECT frame riêng lẻ
+                    try:
+                        rect_img = Image.open(io.BytesIO(jpg_data)).convert("RGB")
+                        return self._save_image(client_name, rect_img, force=True, prefix=f"rect_{x}_{y}")
+                    except Exception as e:
+                        print(f"[ScreenshotStorage] ERROR saving RECT independently: {e}")
+                        return None
                 
                 base_img = self.client_base_images[client_name]
                 
@@ -263,7 +268,7 @@ class ScreenshotStorage:
             print(f"[ScreenshotStorage] ERROR saving screenshot from raw: {e}")
             return None
     
-    def _save_image(self, client_name: str, img: Image.Image, force: bool = False) -> Optional[str]:
+    def _save_image(self, client_name: str, img: Image.Image, force: bool = False, prefix: str = "screen") -> Optional[str]:
         """
         Lưu image vào disk
         
@@ -271,6 +276,7 @@ class ScreenshotStorage:
             client_name: Tên client
             img: PIL Image object
             force: Bắt buộc lưu (bỏ qua throttling)
+            prefix: Tiền tố cho tên file (mặc định: "screen")
         
         Returns:
             Đường dẫn file đã lưu hoặc None
@@ -285,8 +291,8 @@ class ScreenshotStorage:
             # Lấy đường dẫn thư mục
             storage_path = self._get_storage_path(client_name, timestamp)
             
-            # Tạo tên file đơn giản: screen_HHMMSS.jpg
-            filename = self._generate_filename(timestamp)
+            # Tạo tên file đơn giản: screen_HHMMSS.jpg hoặc rect_x_y_HHMMSS.jpg
+            filename = self._generate_filename(timestamp, prefix=prefix)
             
             # Đường dẫn đầy đủ
             file_path = storage_path / filename

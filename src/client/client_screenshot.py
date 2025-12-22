@@ -37,7 +37,7 @@ class ClientScreenshot:
         self.stop = False
         self.frame_seq = 0
         self._lock = threading.Lock()
-        self.FULL_FRAME_INTERVAL = 60.0 # Gửi full frame mỗi 60 giây
+        self.FULL_FRAME_INTERVAL = 10.0 # Gửi full frame mỗi 10 giây (thay vì 60s) để server lưu được nhiều ảnh hơn
         self.last_full_frame_ts = 0.0
         
         # Mode control: VIEW (2s/frame) vs CONTROL (continuous)

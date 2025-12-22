@@ -21,7 +21,9 @@ from src.server.server_constants import (
     CMD_CONNECT_CLIENT, CMD_SESSION_STARTED, CMD_SESSION_ENDED,
     CMD_VIEW_CLIENT, CMD_CONTROL_CLIENT, CMD_STOP_VIEW, CMD_STOP_CONTROL,
     CMD_VIEW_STARTED, CMD_VIEW_STOPPED, CMD_CONTROL_STARTED, CMD_CONTROL_STOPPED, CMD_CONTROL_DENIED,
-    CMD_ERROR, CHANNEL_CONTROL, CHANNEL_INPUT
+    CMD_ERROR, CHANNEL_CONTROL, CHANNEL_INPUT, CHANNEL_FILE,
+    CMD_SEND_FILE, CMD_FILE_TRANSFER_START, CMD_FILE_TRANSFER_ACK, 
+    CMD_FILE_TRANSFER_COMPLETE, CMD_FILE_TRANSFER_ERROR
 )
 from src.server.core.auth_handler import (
     sign_in as auth_sign_in, 
@@ -39,6 +41,10 @@ from src.server.core.control_session import ControlSession
 
 # Import Screenshot Storage
 from src.server.core.screenshot_storage import ScreenshotStorage
+
+# Import File Transfer Manager
+from src.server.core.file_transfer_manager import FileTransferManager
+from src.server.core.file_transfer_handler import FileTransferHandler
 
 # Import database cho keylog
 try:
@@ -85,6 +91,10 @@ class SessionManager(threading.Thread):
             base_path="screenshots",
             change_threshold=0  # 0 = Lưu mọi thay đổi, không cần kiểm tra ngưỡng
         )
+        
+        # File Transfer Manager - Quản lý truyền file
+        self.file_transfer_manager = FileTransferManager()
+        self.pending_file_transfers = {}  # {sender_id: {transfer_id, file_data, metadata}}
         
         self.lock = threading.Lock()
 
@@ -241,20 +251,14 @@ class SessionManager(threading.Thread):
                     # Lấy username của client từ authenticated_users
                     client_username = self.authenticated_users.get(client_id)
                     if client_username:
-                        print(f"[SessionManager] 📸 Received {pdu_type} frame from {client_username}, saving...")
                         # Lưu screenshot (không block thread chính)
                         try:
                             result = self.screenshot_storage.save_screenshot_from_raw(client_username, raw_payload)
+                            # Chỉ log khi lưu thành công hoặc có lỗi
                             if result:
-                                print(f"[SessionManager] ✅ Screenshot saved: {result}")
-                            else:
-                                print(f"[SessionManager] ⚠️ Screenshot not saved (may be filtered)")
+                                print(f"[SessionManager] ✅ Saved {pdu_type}: {result}")
                         except Exception as e:
                             print(f"[SessionManager] ❌ ERROR saving screenshot for {client_username}: {e}")
-                            import traceback
-                            traceback.print_exc()
-                    else:
-                        print(f"[SessionManager] ⚠️ No username found for client_id {client_id}")
                 
                 with self.lock:
                     # 1. Broadcast tới tất cả viewers (nếu có)
@@ -277,8 +281,12 @@ class SessionManager(threading.Thread):
                         # Không có session, xử lý như control command
                         self.pdu_queue.put((client_id, pdu))
             
+            elif pdu_type == "file":
+                # File data PDU → Xử lý file transfer
+                FileTransferHandler.handle_file_pdu(self, client_id, pdu)
+            
             else:
-                # File transfer, etc. → Xử lý qua control session
+                # Other types → Xử lý qua control session
                 with self.lock:
                     if client_id in self.control_sessions:
                         control_session = self.control_sessions[client_id]
@@ -300,8 +308,12 @@ class SessionManager(threading.Thread):
                 # NEVER forward control PDUs to client (they're for server logic only)
                 self.pdu_queue.put((client_id, pdu))
             
+            elif pdu_type == "file":
+                # File data PDU → Xử lý file transfer
+                FileTransferHandler.handle_file_pdu(self, client_id, pdu)
+            
             else:
-                # File transfer, etc.
+                # Other types
                 with self.lock:
                     if client_id in self.manager_sessions and self.manager_sessions[client_id]["control"]:
                         target_client_id = self.manager_sessions[client_id]["control"]
@@ -481,7 +493,81 @@ class SessionManager(threading.Thread):
                     return
                 self._stop_control_session(manager_id=client_id)
             
-            # 8. Xử lý Yêu cầu Kết nối (Manager -> Client) - DEPRECATED, dùng view/control
+            # 8. Xử lý SEND FILE (Manager/Client gửi file)
+            elif msg.startswith(CMD_SEND_FILE):
+                # Format: "send_file:target_id:filename:filesize:file_hash"
+                try:
+                    parts = msg.split(":", 4)
+                    if len(parts) < 4:
+                        self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Invalid format")
+                        return
+                    
+                    _, target_id, filename, filesize_str = parts[:4]
+                    file_hash = parts[4] if len(parts) > 4 else None
+                    filesize = int(filesize_str)
+                    
+                    # Validate filesize
+                    if not self.file_transfer_manager.validate_file_size(filesize):
+                        self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:File too large")
+                        return
+                    
+                    # Determine sender type and receiver type
+                    sender_type = self.clients.get(client_id, ROLE_UNKNOWN)
+                    
+                    # Find receiver
+                    receiver_id = None
+                    receiver_type = None
+                    with self.lock:
+                        for cid, role in self.clients.items():
+                            username = self.authenticated_users.get(cid)
+                            if username == target_id or cid == target_id:
+                                receiver_id = cid
+                                receiver_type = role
+                                break
+                    
+                    if not receiver_id:
+                        self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Target not found")
+                        return
+                    
+                    # Create transfer record in database
+                    sender_username = self.authenticated_users.get(client_id, client_id)
+                    receiver_username = self.authenticated_users.get(receiver_id, receiver_id)
+                    
+                    transfer_id = self.file_transfer_manager.create_transfer_record(
+                        sender_id=sender_username,
+                        sender_type=sender_type,
+                        receiver_id=receiver_username,
+                        receiver_type=receiver_type,
+                        filename=filename,
+                        filesize=filesize,
+                        file_hash=file_hash
+                    )
+                    
+                    if not transfer_id:
+                        self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Database error")
+                        return
+                    
+                    # Store pending transfer
+                    with self.lock:
+                        self.pending_file_transfers[client_id] = {
+                            'transfer_id': transfer_id,
+                            'receiver_id': receiver_id,
+                            'filename': filename,
+                            'filesize': filesize,
+                            'file_hash': file_hash,
+                            'received_bytes': 0,
+                            'chunks': []
+                        }
+                    
+                    # Send acknowledgment to sender
+                    self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_START}:{transfer_id}")
+                    print(f"[FileTransfer] Transfer #{transfer_id} initiated: {filename} ({filesize} bytes)")
+                    
+                except Exception as e:
+                    print(f"[FileTransfer] Error handling send_file: {e}")
+                    self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Server error")
+            
+            # 9. Xử lý Yêu cầu Kết nối (Manager -> Client) - DEPRECATED, dùng view/control
             elif msg.startswith(CMD_CONNECT_CLIENT):
                 # Format: "CONNECT:target_client_id"
                 # Check quyền Manager

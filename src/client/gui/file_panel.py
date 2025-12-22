@@ -19,10 +19,11 @@ class FileTransferPanel(QWidget):
     """Panel for file transfer functionality"""
     
     # Signals
-    file_selected = pyqtSignal(str)  # Emits file path to be sent
+    file_selected = pyqtSignal(str, str)  # Emits (target_id, file_path) to be sent
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.target_id = None  # Will be set to manager/client ID
         self.init_ui()
     
     def init_ui(self):
@@ -140,8 +141,12 @@ class FileTransferPanel(QWidget):
             self.status_label.show_error("File không tồn tại!")
             return
         
-        # Emit signal
-        self.file_selected.emit(self.selected_file_path)
+        if not self.target_id:
+            self.status_label.show_error("Chưa kết nối đến đích!")
+            return
+        
+        # Emit signal with target_id and file_path
+        self.file_selected.emit(self.target_id, self.selected_file_path)
         self.status_label.show_success(f"Đang gửi: {os.path.basename(self.selected_file_path)}")
         
         # Show progress bar
@@ -201,8 +206,14 @@ class FileTransferPanel(QWidget):
     def set_enabled(self, enabled):
         """Enable or disable file transfer controls"""
         self.browse_button.setEnabled(enabled)
-        if self.selected_file_path:
+        if self.selected_file_path and self.target_id:
             self.send_file_button.setEnabled(enabled)
         
         if not enabled:
             self.status_label.show_warning("Chưa kết nối đến server")
+    
+    def set_target(self, target_id: str):
+        """Set target ID for file transfer"""
+        self.target_id = target_id
+        if self.selected_file_path:
+            self.send_file_button.setEnabled(True)

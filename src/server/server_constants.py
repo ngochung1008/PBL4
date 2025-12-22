@@ -99,6 +99,13 @@ CMD_DISABLE_SCREEN_SHARING = "disable_screen_sharing"
 CMD_ENABLE_REMOTE_CONTROL = "enable_remote_control"
 CMD_DISABLE_REMOTE_CONTROL = "disable_remote_control"
 
+# File transfer commands
+CMD_SEND_FILE = "send_file"           # Manager/Client gửi file: "send_file:target_id:filename:filesize"
+CMD_FILE_TRANSFER_START = "file_transfer_start"  # Server thông báo bắt đầu nhận file
+CMD_FILE_TRANSFER_ACK = "file_transfer_ack"      # Server xác nhận nhận file
+CMD_FILE_TRANSFER_COMPLETE = "file_transfer_complete"  # Server thông báo hoàn thành
+CMD_FILE_TRANSFER_ERROR = "file_transfer_error"  # Server thông báo lỗi
+
 # Server -> Client/Manager
 CMD_REGISTER_OK = "register_ok"   # Ví dụ: "register_ok:manager"
 CMD_CLIENT_LIST_UPDATE = "client_list_update" # Gửi JSON: "client_list_update:['pc1', 'pc2']"

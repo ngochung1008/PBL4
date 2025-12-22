@@ -460,8 +460,9 @@ class Client:
         
         # LUÔN GỬI FRAMES - Server cần screenshots liên tục để lưu trữ
         frame_type = "FULL" if bbox is None else "RECT"
-        # In log mỗi frame để debug (sẽ bỏ sau)
-        self.logger(f"[Client] 📹 Gửi {frame_type} frame #{seq}, size: {len(jpg_bytes)} bytes, in_session={self.in_session}")
+        # In log thỉnh thoảng để không spam
+        if seq % 30 == 0 or frame_type == "FULL":  # Log mỗi 30 frame hoặc khi gửi FULL
+            self.logger(f"[Client] 📹 Gửi {frame_type} frame #{seq}, size: {len(jpg_bytes)} bytes")
         return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
 
     def _update_screenshot_mode(self):
