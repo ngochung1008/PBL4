@@ -170,15 +170,24 @@ class ManagerApp:
             return self.seq
 
     def _send_mcs_pdu(self, channel_id: int, pdu_bytes: bytes):
-        if not self.running or not self.client.sock:
+        if not self.running:
+            print(f"[ManagerApp] ⚠️ Cannot send PDU - not running (channel={channel_id})")
+            return
+        if not self.client.sock:
+            print(f"[ManagerApp] ⚠️ Cannot send PDU - socket is None (channel={channel_id})")
             return
         try:
             mcs_frame = MCSLite.build(channel_id, pdu_bytes)
             tpkt_packet = TPKTLayer.pack(mcs_frame)
             with self.lock:
                 self.client.sock.sendall(tpkt_packet)
+            # Debug log for file transfers
+            if channel_id == 5:  # CHANNEL_FILE
+                print(f"[ManagerApp] 📤 Sent FILE PDU: {len(pdu_bytes)} bytes")
         except Exception as e:
             print(f"[ManagerApp] Lỗi gửi PDU: {e}")
+            import traceback
+            traceback.print_exc()
             self._on_receiver_done()
 
     def _send_control_pdu(self, message: str):

@@ -1,0 +1,12 @@
+# Core dependencies
+PyQt6
+pygetwindow
+pynput
+Pillow
+mysql-connector-python
+pywin32
+psutil
+pycryptodome
+
+# Network
+requests

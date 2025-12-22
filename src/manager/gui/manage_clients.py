@@ -1044,8 +1044,7 @@ class ManageClientsWindow(QWidget):
             if manager:
                 manager.file_received.connect(self.file_transfer_panel.add_received_file)
                 manager.file_send_progress.connect(self.file_transfer_panel.update_send_progress)
-                manager.file_send_complete.connect(lambda filename: 
-                    self.file_transfer_panel.status_label.setText(f"✅ Đã gửi: {filename}"))
+                manager.file_send_complete.connect(self.file_transfer_panel.on_send_complete)
                 manager.file_send_error.connect(self.file_transfer_panel.show_error)
             
             # Add panel to layout (chỉ làm 1 lần)

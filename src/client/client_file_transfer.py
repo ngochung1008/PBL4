@@ -141,14 +141,17 @@ class ClientFileTransfer:
             chunk_size = 64 * 1024  # 64KB chunks
             total_sent = 0
             chunk_num = 0
-            seq = 1  # Sequence number cho PDU
+            
+            print(f"[ClientFileTransfer] Starting to send {len(file_data)} bytes in {chunk_size} byte chunks")
             
             while total_sent < len(file_data):
                 chunk = file_data[total_sent:total_sent + chunk_size]
                 
+                # Get proper sequence number from network
+                seq = self.sender.network._next_seq()
+                
                 # Build proper FILE_CHUNK PDU với header đúng
                 file_chunk_pdu = PDUBuilder.build_file_chunk(seq, total_sent, chunk)
-                seq += 1
                 
                 # Gửi chunk qua FILE channel
                 self.sender.network.send_mcs_pdu(CHANNEL_FILE, file_chunk_pdu)

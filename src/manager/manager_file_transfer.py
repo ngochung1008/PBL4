@@ -111,13 +111,16 @@ class ManagerFileTransfer:
             chunk_size = 64 * 1024  # 64KB chunks
             total_sent = 0
             
-            seq = 1  # Sequence number
+            print(f"[ManagerFileTransfer] Starting to send {len(file_data)} bytes in {chunk_size} byte chunks")
+            
             while total_sent < len(file_data):
                 chunk = file_data[total_sent:total_sent + chunk_size]
                 
+                # Sử dụng sequence number từ ManagerApp
+                seq = self.app.next_seq()  # Use proper sequence number
+                
                 # Build proper FILE_CHUNK PDU (type=11, not 5)
                 file_chunk_pdu = PDUBuilder.build_file_chunk(seq, total_sent, chunk)
-                seq += 1
                 
                 # Gửi qua ManagerApp._send_mcs_pdu (ManagerApp không có .network)
                 self.app._send_mcs_pdu(CHANNEL_FILE, file_chunk_pdu)

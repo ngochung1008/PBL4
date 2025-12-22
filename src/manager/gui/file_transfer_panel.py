@@ -293,9 +293,15 @@ class ManagerFileTransferPanel(QWidget):
         """Update send progress bar"""
         self.send_progress.setValue(progress)
         if progress >= 100:
-            self.status_label.setText("✅ Gửi file thành công!")
-            self.send_progress.setVisible(False)
-            self.reset_send_form()
+            # Chỉ hiển thị "đang chờ xác nhận" - thông báo thành công thực sự sẽ đến từ file_transfer_complete
+            self.status_label.setText("📤 Đã gửi dữ liệu, đang chờ xác nhận từ server...")
+            # Không hide progress bar và reset form ở đây - đợi file_transfer_complete
+    
+    def on_send_complete(self, filename):
+        """Called when server confirms file transfer complete"""
+        self.status_label.setText(f"✅ Đã gửi thành công: {filename}")
+        self.send_progress.setVisible(False)
+        self.reset_send_form()
     
     def reset_send_form(self):
         """Reset send file form"""
