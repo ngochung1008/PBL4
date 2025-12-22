@@ -5,6 +5,7 @@ Client File Transfer Module - Gửi và nhận file từ/tới manager
 import os
 import hashlib
 import threading
+import time
 from typing import Optional, Callable
 
 
@@ -65,17 +66,8 @@ class ClientFileTransfer:
             from src.server.server_constants import CMD_SEND_FILE
             control_msg = f"{CMD_SEND_FILE}:{target_id}:{filename}:{filesize}:{file_hash}"
             
-            # Gửi qua sender control channel
-            if hasattr(self.sender, 'send_control'):
-                self.sender.send_control(control_msg)
-            else:
-                # Fallback: gửi qua network trực tiếp
-                from src.common.network.pdu_builder import PDUBuilder
-                from src.client.client_constants import CHANNEL_CONTROL
-                builder = PDUBuilder()
-                seq = self.sender.next_seq()
-                pdu = builder.build_control(seq, control_msg.encode('utf-8'))
-                self.sender.network.send_pdu(CHANNEL_CONTROL, pdu)
+            # Gửi qua network control channel
+            self.sender.network.send_control_pdu(control_msg)
             
             # Lưu thông tin để gửi file sau khi nhận ACK
             with self.lock:
@@ -136,41 +128,37 @@ class ClientFileTransfer:
             file_data = file_info['file_data']
             filename = file_info['filename']
         
-        print(f"[ClientFileTransfer] Received ACK, sending file data...")
+        print(f"[ClientFileTransfer] Starting to send file chunks...")
         
         # Gửi file data qua CHANNEL_FILE
         try:
             from src.client.client_constants import CHANNEL_FILE
-            from src.common.network.pdu_builder import PDUBuilder
             
             # Chia file thành chunks nếu cần
             chunk_size = 64 * 1024  # 64KB chunks
             total_sent = 0
+            chunk_num = 0
             
             while total_sent < len(file_data):
                 chunk = file_data[total_sent:total_sent + chunk_size]
                 
-                # Tạo file PDU
-                builder = PDUBuilder()
-                seq = self.sender.next_seq()
-                
-                # Build simple file chunk PDU
-                file_pdu_header = builder._hdr(seq, 5, 0)  # 5 = file type
-                file_pdu = file_pdu_header + chunk
-                
-                # Gửi
-                self.sender.network.send_pdu(CHANNEL_FILE, file_pdu)
+                # Gửi chunk qua FILE channel - dùng send_mcs_pdu
+                self.sender.network.send_mcs_pdu(CHANNEL_FILE, chunk)
                 
                 total_sent += len(chunk)
+                chunk_num += 1
                 
                 # Report progress
                 if self.on_progress:
                     progress = int(total_sent * 100 / len(file_data))
                     self.on_progress(progress)
                 
-                print(f"[ClientFileTransfer] Sent {total_sent}/{len(file_data)} bytes")
+                print(f"[ClientFileTransfer] Sent chunk {chunk_num}: {total_sent}/{len(file_data)} bytes ({progress}%)")
+                
+                # Small delay to avoid overwhelming
+                time.sleep(0.01)
             
-            print(f"[ClientFileTransfer] File data sent completely")
+            print(f"[ClientFileTransfer] File data sent completely: {len(file_data)} bytes")
             
         except Exception as e:
             print(f"[ClientFileTransfer] Error sending file data: {e}")
@@ -221,19 +209,45 @@ class ClientFileTransfer:
             pdu: Dict chứa file data từ server
         """
         try:
-            # Giả sử pdu có dạng: {'data': bytes, 'metadata': {...}}
-            file_data = pdu.get('data', b'')
-            metadata = pdu.get('metadata', {})
+            print(f"[ClientFileTransfer] ===== Received FILE PDU =====")
+            print(f"[ClientFileTransfer] PDU keys: {list(pdu.keys())}")
+            print(f"[ClientFileTransfer] PDU type: {pdu.get('type')}")
             
-            if file_data:
-                print(f"[ClientFileTransfer] Received file PDU: {len(file_data)} bytes")
+            # Kiểm tra các format khác nhau của PDU
+            # Format 1: {'data': bytes, 'metadata': {...}}
+            # Format 2: {'type': 'file_chunk', 'data': bytes, ...}
+            # Format 3: Raw bytes trong pdu
+            
+            file_data = None
+            metadata = {}
+            
+            # Thử lấy data từ các key khác nhau
+            if 'data' in pdu:
+                file_data = pdu.get('data', b'')
+                metadata = pdu.get('metadata', {})
+            elif '_raw_payload' in pdu:
+                # PDU có raw payload - cần parse
+                raw = pdu.get('_raw_payload', b'')
+                if len(raw) > 0:
+                    file_data = raw
+                    # Thử parse metadata từ pdu khác
+                    metadata = {
+                        'filename': pdu.get('filename', 'received_file'),
+                        'sender_id': pdu.get('sender_id', 'unknown')
+                    }
+            
+            if file_data and len(file_data) > 0:
+                print(f"[ClientFileTransfer] Received file data: {len(file_data)} bytes")
                 # Nhận và lưu file
                 self.handle_file_received(metadata, file_data)
             else:
-                print(f"[ClientFileTransfer] Empty file PDU received")
+                print(f"[ClientFileTransfer] No file data in PDU or empty data")
+                print(f"[ClientFileTransfer] Full PDU content: {pdu}")
                 
         except Exception as e:
             print(f"[ClientFileTransfer] Error handling file PDU: {e}")
+            import traceback
+            traceback.print_exc()
             if self.on_error:
                 self.on_error(f"Error receiving file: {e}")
     
