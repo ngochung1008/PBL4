@@ -1251,7 +1251,7 @@ class ClientWindow(QWidget):
         QTimer.singleShot(0, update_gui)
     
     def closeEvent(self, event):
-        """Xử lý sự kiện đóng cửa sổ"""
+        """Xử lý sự kiện đóng cửa sổ - tự động logout"""
         if self.is_service_running:
             reply = QMessageBox.question(
                 self, 
@@ -1263,11 +1263,27 @@ class ClientWindow(QWidget):
             
             if reply == QMessageBox.StandardButton.Yes:
                 self.stop_client_service()
+                # Gọi logout để cập nhật EndTime trong database
+                self._perform_logout()
                 event.accept()
             else:
                 event.ignore()
         else:
+            # Gọi logout để cập nhật EndTime trong database
+            self._perform_logout()
             event.accept()
+    
+    def _perform_logout(self):
+        """Thực hiện logout - cập nhật EndTime trong database"""
+        try:
+            if hasattr(self, 'token') and self.token:
+                conn = QApplication.instance().conn
+                if conn:
+                    conn.client_logout(self.token)
+                    print("[Client] ✅ Đã logout và cập nhật EndTime")
+                QApplication.instance().current_user = None
+        except Exception as e:
+            print(f"[Client] ⚠️ Lỗi khi logout: {e}")
 
 
 if __name__ == "__main__":

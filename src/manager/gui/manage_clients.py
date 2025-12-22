@@ -57,7 +57,7 @@ class ManageClientsWindow(QWidget):
     def init_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # ==== Thanh top: Back + Add Client ====
+        # ==== Thanh top: Back + Search + Logout ====
         top_bar = QHBoxLayout()
         self.back_btn = create_back_button()
         search_user_box, self.search_user = create_search_bar("Search client by username or IP")
@@ -66,6 +66,24 @@ class ManageClientsWindow(QWidget):
         top_bar.addStretch()
 
         top_bar.addWidget(search_user_box)
+        
+        # Nút Logout
+        self.logout_btn = QPushButton("Logout")
+        self.logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.logout_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #E74C3C;
+                color: white;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #C0392B;
+            }
+        """)
+        self.logout_btn.clicked.connect(self.logout)
+        top_bar.addWidget(self.logout_btn)
 
         main_layout.addLayout(top_bar)
 
@@ -229,6 +247,110 @@ class ManageClientsWindow(QWidget):
         self.server_gui = ServerWindow()
         self.server_gui.show()
         self.close()
+    
+    def closeEvent(self, event):
+        """Xử lý sự kiện đóng cửa sổ - tự động logout"""
+        reply = QMessageBox.question(
+            self, 
+            'Xác nhận', 
+            'Bạn có muốn đăng xuất và thoát?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self._perform_logout()
+            event.accept()
+        else:
+            event.ignore()
+    
+    def _perform_logout(self):
+        """Thực hiện logout - cập nhật EndTime trong database"""
+        try:
+            app = QApplication.instance()
+            
+            # Dừng manager logic
+            if hasattr(app, 'manager_logic') and app.manager_logic:
+                app.manager_logic.stop()
+                print("[Manager] ✅ Đã dừng manager logic")
+            
+            # Gọi logout API để cập nhật EndTime
+            if hasattr(app, 'conn') and app.conn and hasattr(app, 'current_user') and app.current_user:
+                app.conn.client_logout(app.current_user)
+                print("[Manager] ✅ Đã logout và cập nhật EndTime")
+                app.current_user = None
+        except Exception as e:
+            print(f"[Manager] ⚠️ Lỗi khi logout: {e}")
+    
+    def logout(self):
+        """Nút Logout - quay về màn hình đăng nhập"""
+        self._perform_logout()
+        
+        # Quay về màn hình đăng nhập
+        from src.manager.gui.manager_gui import LoginDialog
+        login_dialog = LoginDialog()
+        result = login_dialog.exec()
+        
+        if result == 1:
+            # Đăng nhập lại thành công - khởi động lại manager
+            self._restart_manager(login_dialog.username, login_dialog.password)
+        else:
+            # Thoát ứng dụng
+            QApplication.instance().quit()
+    
+    def _restart_manager(self, username, password):
+        """Khởi động lại manager với thông tin đăng nhập mới"""
+        try:
+            app = QApplication.instance()
+            
+            # Tạo connection mới
+            from src.client.auth import ClientConnection
+            conn = ClientConnection()
+            token = conn.client_login(username, password)
+            if not token:
+                QMessageBox.critical(self, "Lỗi", "Đăng nhập thất bại!")
+                QApplication.instance().quit()
+                return
+            
+            app.conn = conn
+            app.current_user = token
+            app.current_name = username
+            
+            # Tạo manager mới
+            from src.manager.manager import Manager
+            HOST = "192.168.2.193"  # TODO: Lấy từ config
+            PORT = 5000
+            MANAGER_ID = "manager_gui_1"
+            
+            manager_logic = Manager(HOST, PORT, MANAGER_ID, username, password)
+            app.manager_logic = manager_logic
+            
+            # Kết nối signals
+            manager_logic.client_list_updated.connect(self.update_client_list)
+            manager_logic.session_started.connect(self.set_session_started)
+            manager_logic.session_ended.connect(self.set_session_ended)
+            manager_logic.video_pdu_received.connect(self.update_video_frame)
+            manager_logic.cursor_pdu_received.connect(self.update_cursor_pos)
+            manager_logic.error_received.connect(self.show_error)
+            manager_logic.input_pdu_received.connect(self.display_keylog)
+            manager_logic.security_alert_received.connect(self.display_security_alert)
+            
+            self.connect_requested.connect(manager_logic.gui_connect_to_client)
+            self.disconnect_requested.connect(manager_logic.gui_disconnect_session)
+            self.input_event_generated.connect(manager_logic._on_gui_input)
+            
+            # Khởi động manager
+            if not manager_logic.start():
+                QMessageBox.critical(self, "Lỗi", "Không thể khởi động Manager!")
+                return
+            
+            print(f"[Manager] ✅ Đã khởi động lại với user: {username}")
+            
+        except Exception as e:
+            print(f"[Manager] ❌ Lỗi khi restart: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Lỗi", f"Không thể khởi động lại: {e}")
 
     def show_client_info(self, index):
         if index < 0:

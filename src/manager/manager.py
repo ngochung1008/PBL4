@@ -560,6 +560,18 @@ if __name__ == "__main__":
     # 7. Hiển thị GUI
     window.show()
     
-    app.aboutToQuit.connect(manager_logic.stop)
+    # Xử lý logout khi thoát app
+    def on_app_quit():
+        """Cleanup khi thoát app"""
+        try:
+            manager_logic.stop()
+            # Logout để cập nhật EndTime trong database
+            if app.conn and app.current_user:
+                app.conn.client_logout(app.current_user)
+                print("[Manager] ✅ Đã logout và cập nhật EndTime khi thoát")
+        except Exception as e:
+            print(f"[Manager] ⚠️ Lỗi khi cleanup: {e}")
+    
+    app.aboutToQuit.connect(on_app_quit)
     
     sys.exit(app.exec())
