@@ -108,7 +108,8 @@ class ManagerFileTransfer:
             from src.common.network.pdu_builder import PDUBuilder
             
             # Chia file thành chunks
-            chunk_size = 64 * 1024  # 64KB chunks
+            # Note: MCS layer giới hạn 65535 bytes, nên chunk phải nhỏ hơn (trừ header)
+            chunk_size = 32 * 1024  # 32KB chunks (để tránh vượt quá MCS limit)
             total_sent = 0
             
             print(f"[ManagerFileTransfer] Starting to send {len(file_data)} bytes in {chunk_size} byte chunks")

@@ -138,7 +138,8 @@ class ClientFileTransfer:
             from src.common.network.pdu_builder import PDUBuilder
             
             # Chia file thành chunks nếu cần
-            chunk_size = 64 * 1024  # 64KB chunks
+            # Note: MCS layer giới hạn 65535 bytes, nên chunk phải nhỏ hơn (trừ header)
+            chunk_size = 32 * 1024  # 32KB chunks (để tránh vượt quá MCS limit)
             total_sent = 0
             chunk_num = 0
             

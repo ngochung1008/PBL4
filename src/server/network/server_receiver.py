@@ -126,13 +126,21 @@ class ServerReceiver(threading.Thread):
                 should_reassemble = (channel_id != CHANNEL_VIDEO and channel_id != CHANNEL_CURSOR)
                 
                 parsed = self.parser.parse(pdu_bytes, reassemble=should_reassemble)
+                # Debug log for FILE channel
+                if channel_id == CHANNEL_FILE:
+                    print(f"[Receiver-{self.client_id}] 📁 Parsed FILE PDU: type={parsed.get('type') if parsed else 'None'}")
             except Exception as e:
                 print(f"[Receiver-{self.client_id}] Lỗi parse: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
 
             if parsed and parsed.get("type") != "fragment_pending":
                 parsed["_raw_payload"] = pdu_bytes
                 parsed["client_id"] = self.client_id
+                # Debug log for FILE channel
+                if channel_id == CHANNEL_FILE:
+                    print(f"[Receiver-{self.client_id}] 📁 Pushing FILE PDU to callback")
                 self.pdu_push_callback(self.client_id, parsed)
 
     def run(self):
@@ -161,6 +169,9 @@ class ServerReceiver(threading.Thread):
                     # Lấy dữ liệu mới từ MCS (hàm này flush buffer của MCS)
                     new_data = self.mcs.read_channel(ch_id)
                     if new_data:
+                        # Debug log for FILE channel
+                        if ch_id == CHANNEL_FILE:
+                            print(f"[Receiver-{self.client_id}] 📁 Received {len(new_data)} bytes on CHANNEL_FILE")
                         # Thêm vào buffer đệm của Receiver
                         self.channel_buffers[ch_id].extend(new_data)
                     

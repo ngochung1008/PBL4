@@ -209,6 +209,10 @@ class SessionManager(threading.Thread):
         pdu_type = pdu.get("type")
         print(f"[SessionManager handle_pdu] client_id={client_id}, pdu_type={pdu_type}")
         
+        # Debug log for file transfers
+        if pdu_type in ("file", "file_chunk", "file_start", "file_end"):
+            print(f"[SessionManager] 📁 FILE PDU received from {client_id}, type={pdu_type}")
+        
         # Phân biệt keylog (từ client) vs điều khiển input (từ manager)
         if pdu_type == "input":
             # Kiểm tra xem có phải keylog data không (có KeyData field)
@@ -224,6 +228,18 @@ class SessionManager(threading.Thread):
         # === KIỂM TRA ROLE ===
         role = self.clients.get(client_id)
         print(f"[SessionManager handle_pdu] role for {client_id} = {role}")
+        
+        # === XỬ LÝ FILE PDU ĐẶC BIỆT - Kiểm tra pending transfer trước khi check role ===
+        # File chunks có thể đến khi đã có pending transfer, không cần kiểm tra role
+        if pdu_type in ("file", "file_chunk", "file_start", "file_end"):
+            with self.lock:
+                has_pending = client_id in self.pending_file_transfers
+            if has_pending:
+                print(f"[SessionManager] 📁 Processing FILE PDU from {client_id} (has pending transfer)")
+                FileTransferHandler.handle_file_pdu(self, client_id, pdu)
+                return
+            else:
+                print(f"[SessionManager] ⚠️ FILE PDU from {client_id} but no pending transfer")
         
         # === XỬ LÝ CLIENT/MANAGER CHƯA AUTHENTICATED (role = None or ROLE_UNKNOWN) ===
         if role is None or role == ROLE_UNKNOWN:

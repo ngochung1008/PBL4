@@ -110,7 +110,8 @@ class FileTransferHandler:
                     from src.common.network.pdu_builder import PDUBuilder
                     from src.common.network.mcs_layer import MCSLite
                     
-                    chunk_size = 64 * 1024  # 64KB chunks
+                    # Note: MCS layer giới hạn 65535 bytes
+                    chunk_size = 32 * 1024  # 32KB chunks (để tránh vượt quá MCS limit)
                     total_sent = 0
                     seq = session_manager._next_seq()
                     
