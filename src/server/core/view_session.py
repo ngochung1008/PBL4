@@ -11,7 +11,7 @@ class ViewSession:
     - Client gửi video/cursor tới TẤT CẢ viewers
     - Không có input control
     - Nhiều manager có thể view cùng lúc (1-nhiều)
-    - Client capture màn hình mỗi 3 giây để tiết kiệm băng thông
+    - Client capture màn hình mỗi 2 giây để server lưu screenshot thường xuyên
     """
     def __init__(self, client_id, broadcaster):
         self.client_id = client_id

@@ -14,7 +14,7 @@ LIGHT_TEXT = "#FFFFFF"
 
 
 class ProfileWindow(QWidget):
-    def __init__(self, user, token ):
+    def __init__(self, user, token):
         super().__init__()
         print("ProfileWindow initialized")
 
@@ -26,7 +26,7 @@ class ProfileWindow(QWidget):
         self.user = user
         self.token = token
         self.is_editing = False
-
+        
         self.init_ui()
 
     def init_ui(self):
@@ -176,6 +176,11 @@ class ProfileWindow(QWidget):
             from src.client.client import ClientWindow
             self.profile_window = ClientWindow(self.user, self.token)
             self.profile_window.showMaximized()
+            self.close()
+        else:
+            from src.gui.server_gui import ServerWindow
+            self.server_window = ServerWindow()
+            self.server_window.show()
             self.close()
 
     def refresh_user_data(self):

