@@ -954,10 +954,12 @@ class ClientWindow(QWidget):
         QMessageBox.information(self, "Copied", "IP address copied to clipboard!")
 
     def on_profile(self):
-        """Mở cửa sổ profile"""
+        """Mở cửa sổ profile - không logout"""
         from src.gui.profile import ProfileWindow
         self.profile_window = ProfileWindow(self.user, self.token)
         self.profile_window.showMaximized()
+        # Đánh dấu là đang đổi cửa sổ, không phải thoát
+        self._switching_window = True
         self.close()
 
     def Logout(self):
@@ -1251,7 +1253,14 @@ class ClientWindow(QWidget):
         QTimer.singleShot(0, update_gui)
     
     def closeEvent(self, event):
-        """Xử lý sự kiện đóng cửa sổ - tự động logout"""
+        """Xử lý sự kiện đóng cửa sổ"""
+        # Nếu đang đổi cửa sổ (Profile) thì không logout
+        if getattr(self, '_switching_window', False):
+            self._switching_window = False
+            event.accept()
+            return
+        
+        # Thực sự thoát - logout
         if self.is_service_running:
             reply = QMessageBox.question(
                 self, 
