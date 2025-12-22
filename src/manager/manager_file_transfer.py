@@ -119,9 +119,8 @@ class ManagerFileTransfer:
                 file_chunk_pdu = PDUBuilder.build_file_chunk(seq, total_sent, chunk)
                 seq += 1
                 
-                # Gửi qua network
-                if hasattr(self.app, 'network'):
-                    self.app.network.send_pdu(CHANNEL_FILE, file_chunk_pdu)
+                # Gửi qua ManagerApp._send_mcs_pdu (ManagerApp không có .network)
+                self.app._send_mcs_pdu(CHANNEL_FILE, file_chunk_pdu)
                 
                 total_sent += len(chunk)
                 
