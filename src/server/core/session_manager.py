@@ -496,8 +496,12 @@ class SessionManager(threading.Thread):
             # 8. Xử lý SEND FILE (Manager/Client gửi file)
             elif msg.startswith(CMD_SEND_FILE):
                 # Format: "send_file:target_id:filename:filesize:file_hash"
+                print(f"[FileTransfer] ===== RECEIVED SEND_FILE REQUEST =====")
+                print(f"[FileTransfer] From client_id: {client_id}")
+                print(f"[FileTransfer] Message: {msg}")
                 try:
                     parts = msg.split(":", 4)
+                    print(f"[FileTransfer] Parsed parts: {parts}")
                     if len(parts) < 4:
                         self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Invalid format")
                         return
@@ -505,6 +509,7 @@ class SessionManager(threading.Thread):
                     _, target_id, filename, filesize_str = parts[:4]
                     file_hash = parts[4] if len(parts) > 4 else None
                     filesize = int(filesize_str)
+                    print(f"[FileTransfer] Target: {target_id}, File: {filename}, Size: {filesize}")
                     
                     # Validate filesize
                     if not self.file_transfer_manager.validate_file_size(filesize):
@@ -513,6 +518,7 @@ class SessionManager(threading.Thread):
                     
                     # Determine sender type and receiver type
                     sender_type = self.clients.get(client_id, ROLE_UNKNOWN)
+                    print(f"[FileTransfer] Sender type: {sender_type}")
                     
                     # Find receiver
                     receiver_id = None
@@ -520,12 +526,15 @@ class SessionManager(threading.Thread):
                     
                     # Special case: if target_id is "server", find any connected manager
                     if target_id.lower() == "server":
+                        print(f"[FileTransfer] Target is 'server', finding manager...")
                         with self.lock:
+                            print(f"[FileTransfer] Connected clients: {list(self.clients.items())}")
                             # Find first manager (prioritize manager viewing this client)
                             for cid, role in self.clients.items():
                                 if role == ROLE_MANAGER:
                                     receiver_id = cid
                                     receiver_type = role
+                                    print(f"[FileTransfer] Found manager: {cid}")
                                     self.logger(f"[Server] Auto-selected manager {cid} for file transfer from {client_id}")
                                     break
                     else:
@@ -538,13 +547,17 @@ class SessionManager(threading.Thread):
                                     receiver_type = role
                                     break
                     
+                    print(f"[FileTransfer] Receiver found: {receiver_id}, type: {receiver_type}")
+                    
                     if not receiver_id:
+                        print(f"[FileTransfer] ERROR: No receiver found for target '{target_id}'")
                         self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Target not found")
                         return
                     
-                    # Create transfer record in database
+                    # Create transfer record (in-memory, no database)
                     sender_username = self.authenticated_users.get(client_id, client_id)
                     receiver_username = self.authenticated_users.get(receiver_id, receiver_id)
+                    print(f"[FileTransfer] Creating transfer: {sender_username} -> {receiver_username}")
                     
                     transfer_id = self.file_transfer_manager.create_transfer_record(
                         sender_id=sender_username,
@@ -555,8 +568,10 @@ class SessionManager(threading.Thread):
                         filesize=filesize,
                         file_hash=file_hash
                     )
+                    print(f"[FileTransfer] Transfer ID created: {transfer_id}")
                     
                     if not transfer_id:
+                        print(f"[FileTransfer] ERROR: Failed to create transfer record")
                         self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Database error")
                         return
                     
