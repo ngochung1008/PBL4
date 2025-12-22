@@ -469,7 +469,7 @@ class Client:
         """
         Cập nhật chế độ screenshot dựa trên session hiện tại:
         - Nếu đang bị control: CONTROL mode (30 FPS - continuous)
-        - Ngược lại: LUÔN VIEW mode (3s/frame) - để server lưu screenshots
+        - Ngược lại: LUÔN VIEW mode (2s/frame) - để server lưu screenshots thường xuyên
         """
         if self.is_being_controlled:
             # Ưu tiên CONTROL mode (mượt mà, liên tục - 30 FPS)
@@ -481,7 +481,7 @@ class Client:
             # Server cần screenshots liên tục để giám sát và lưu lại
             self.screenshot.set_mode(self.screenshot.MODE_VIEW)
             self.in_session = True
-            self.logger(f"[Client] ✅ Set VIEW mode (3s/frame) - Auto capture ON")
+            self.logger(f"[Client] ✅ Set VIEW mode (2s/frame) - Auto capture ON")
 
     def _on_control_pdu(self, pdu: dict):
         msg = pdu.get("message", "")
@@ -492,7 +492,7 @@ class Client:
             # AUTO-ENABLE VIEW MODE - Bắt đầu gửi screenshots liên tục
             self.screenshot.set_mode(self.screenshot.MODE_VIEW)
             self.in_session = True
-            self.logger(f"[Client] ✅ Auto-enabled VIEW mode (3s/frame) - Continuous capture started")
+            self.logger(f"[Client] ✅ Auto-enabled VIEW mode (2s/frame) - Continuous capture started")
             
         elif msg.startswith("login_fail"):
             self.logger("[Client] Đăng nhập thất bại!")

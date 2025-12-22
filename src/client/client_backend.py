@@ -133,7 +133,7 @@ class ClientBackend:
         """
         Cập nhật chế độ screenshot dựa trên session hiện tại:
         - Nếu đang bị control: CONTROL mode (30 FPS - continuous)
-        - Ngược lại: LUÔN VIEW mode (3s/frame) - để server lưu screenshots
+        - Ngược lại: LUÔN VIEW mode (2s/frame) - để server lưu screenshots thường xuyên
         """
         print(f"[ClientBackend] _update_screenshot_mode: is_being_controlled={self.is_being_controlled}, viewer_count={self.viewer_count}")
         if self.is_being_controlled:
@@ -146,7 +146,7 @@ class ClientBackend:
             # Server cần screenshots liên tục để giám sát và lưu lại
             self.screenshot.set_mode(self.screenshot.MODE_VIEW)
             self.in_session = True
-            print(f"[ClientBackend] ✅ Set VIEW mode (3s/frame) - Auto capture ON")
+            print(f"[ClientBackend] ✅ Set VIEW mode (2s/frame) - Auto capture ON")
 
     def _monitor_loop(self):
         """Giám sát cửa sổ active và phát hiện vi phạm"""

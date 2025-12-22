@@ -15,7 +15,7 @@ except AttributeError:
 
 class ClientScreenshot:
     # Capture modes
-    MODE_VIEW = "view"      # View-only mode: 3 giây/frame (tiết kiệm băng thông)
+    MODE_VIEW = "view"      # View-only mode: 2 giây/frame (lưu screenshot thường xuyên)
     MODE_CONTROL = "control"  # Control mode: Continuous (30 FPS cho smooth)
     MODE_IDLE = "idle"       # Idle mode: Không gửi (chưa có session)
     
@@ -40,9 +40,9 @@ class ClientScreenshot:
         self.FULL_FRAME_INTERVAL = 60.0 # Gửi full frame mỗi 60 giây
         self.last_full_frame_ts = 0.0
         
-        # Mode control: VIEW (3s/frame) vs CONTROL (continuous)
+        # Mode control: VIEW (2s/frame) vs CONTROL (continuous)
         self.mode = self.MODE_VIEW  # Bắt đầu ở VIEW mode ngay từ đầu
-        self.fps_view = 0.33  # ~3 giây/frame cho VIEW mode
+        self.fps_view = 0.5  # ~2 giây/frame cho VIEW mode (lưu screenshot thường xuyên hơn)
         self.fps_control = 30  # 30 FPS cho CONTROL mode (smooth)
 
     def _resize_if_needed(self, img):
@@ -121,8 +121,8 @@ class ClientScreenshot:
             
             # Cập nhật FPS dựa trên mode
             if mode == self.MODE_VIEW:
-                self.fps = self.fps_view  # 3 giây/frame
-                print(f"[ClientScreenshot] 👁️ Chuyển sang VIEW mode (3s/frame)")
+                self.fps = self.fps_view  # 2 giây/frame
+                print(f"[ClientScreenshot] 👁️ Chuyển sang VIEW mode (2s/frame)")
             elif mode == self.MODE_CONTROL:
                 self.fps = self.fps_control  # 30 FPS
                 print(f"[ClientScreenshot] 🎮 Chuyển sang CONTROL mode (30 FPS - continuous)")
