@@ -41,7 +41,7 @@ class ClientScreenshot:
         self.last_full_frame_ts = 0.0
         
         # Mode control: VIEW (3s/frame) vs CONTROL (continuous)
-        self.mode = self.MODE_IDLE
+        self.mode = self.MODE_VIEW  # Bắt đầu ở VIEW mode ngay từ đầu
         self.fps_view = 0.33  # ~3 giây/frame cho VIEW mode
         self.fps_control = 30  # 30 FPS cho CONTROL mode (smooth)
 

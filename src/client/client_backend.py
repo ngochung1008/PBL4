@@ -79,6 +79,10 @@ class ClientBackend:
         # 2. Login với server
         self._login_to_server()
         
+        # 2.5. Bắt đầu capture ngay sau khi login (VIEW mode)
+        self.logger("[ClientBackend] 📸 Bắt đầu capture màn hình tự động...")
+        self.screenshot.set_mode(ClientScreenshot.MODE_VIEW)
+        
         # 3. Khởi động Sender
         self.sender.start()
         
@@ -129,25 +133,20 @@ class ClientBackend:
         """
         Cập nhật chế độ screenshot dựa trên session hiện tại:
         - Nếu đang bị control: CONTROL mode (30 FPS - continuous)
-        - Nếu chỉ đang bị view: VIEW mode (3s/frame)
-        - Nếu không có session nào: IDLE mode (không gửi)
+        - Ngược lại: LUÔN VIEW mode (3s/frame) - để server lưu screenshots
         """
         print(f"[ClientBackend] _update_screenshot_mode: is_being_controlled={self.is_being_controlled}, viewer_count={self.viewer_count}")
         if self.is_being_controlled:
-            # Ưu tiên CONTROL mode (mượt mà, liên tục)
+            # Ưu tiên CONTROL mode (mượt mà, liên tục - 30 FPS)
             self.screenshot.set_mode(self.screenshot.MODE_CONTROL)
             self.in_session = True
-            print(f"[ClientBackend] ✅ Set CONTROL mode, in_session={self.in_session}")
-        elif self.viewer_count > 0:
-            # Chỉ VIEW (tiết kiệm băng thông)
+            print(f"[ClientBackend] ✅ Set CONTROL mode (30 FPS)")
+        else:
+            # LUÔN BẬT VIEW MODE - Không bao giờ IDLE
+            # Server cần screenshots liên tục để giám sát và lưu lại
             self.screenshot.set_mode(self.screenshot.MODE_VIEW)
             self.in_session = True
-            print(f"[ClientBackend] ✅ Set VIEW mode, in_session={self.in_session}")
-        else:
-            # Không có session nào
-            self.screenshot.set_mode(self.screenshot.MODE_IDLE)
-            self.in_session = False
-            print(f"[ClientBackend] ✅ Set IDLE mode, in_session={self.in_session}")
+            print(f"[ClientBackend] ✅ Set VIEW mode (3s/frame) - Auto capture ON")
 
     def _monitor_loop(self):
         """Giám sát cửa sổ active và phát hiện vi phạm"""
@@ -192,14 +191,11 @@ class ClientBackend:
             time.sleep(2)
 
     def _on_frame(self, width, height, jpg_bytes, bbox, img, seq, ts_ms):
-        print(f"[ClientBackend] _on_frame called: in_session={self.in_session}, size={len(jpg_bytes)}, seq={seq}")
-        if self.in_session:
-            result = self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
-            print(f"[ClientBackend] ✅ Frame enqueued: {result}")
-            return result
-        else:
-            print(f"[ClientBackend] ⚠️ Frame skipped (not in session)")
-            return False
+        # LUÔN GỬI FRAMES - Không cần kiểm tra session
+        # Server sẽ tự động lưu screenshots
+        # print(f"[ClientBackend] _on_frame: size={len(jpg_bytes)}, seq={seq}")
+        result = self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
+        return result
 
     def _on_control_pdu(self, pdu: dict):
         msg = pdu.get("message", "")

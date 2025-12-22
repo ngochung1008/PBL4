@@ -458,37 +458,30 @@ class Client:
                 self.logger(f"[Client] 🚫 Screen sharing bị tắt, không gửi frame")
             return
         
-        # Tất cả các role đều được phép gửi frame (screen sharing)
-        if self.in_session:
-            frame_type = "FULL" if bbox is None else "RECT"
-            # In log thỉnh thoảng để không spam
-            if seq % 30 == 0:  # Mỗi 30 frame in 1 lần
-                self.logger(f"[Client] 📹 Gửi {frame_type} frame #{seq}, size: {len(jpg_bytes)} bytes")
-            return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
-        else:
-            # In cảnh báo nếu không trong session
-            if seq % 100 == 0:  # Mỗi 100 frame in 1 lần
-                self.logger(f"[Client] ⚠️ KHÔNG gửi frame vì chưa có session (in_session={self.in_session})")
+        # LUÔN GỬI FRAMES - Server cần screenshots liên tục để lưu trữ
+        frame_type = "FULL" if bbox is None else "RECT"
+        # In log thỉnh thoảng để không spam
+        if seq % 30 == 0:  # Mỗi 30 frame in 1 lần
+            self.logger(f"[Client] 📹 Gửi {frame_type} frame #{seq}, size: {len(jpg_bytes)} bytes")
+        return self.sender.enqueue_frame(width, height, jpg_bytes, bbox, seq, ts_ms)
 
     def _update_screenshot_mode(self):
         """
         Cập nhật chế độ screenshot dựa trên session hiện tại:
         - Nếu đang bị control: CONTROL mode (30 FPS - continuous)
-        - Nếu chỉ đang bị view: VIEW mode (3s/frame)
-        - Nếu không có session nào: IDLE mode (không gửi)
+        - Ngược lại: LUÔN VIEW mode (3s/frame) - để server lưu screenshots
         """
         if self.is_being_controlled:
-            # Ưu tiên CONTROL mode (mượt mà, liên tục)
+            # Ưu tiên CONTROL mode (mượt mà, liên tục - 30 FPS)
             self.screenshot.set_mode(self.screenshot.MODE_CONTROL)
             self.in_session = True
-        elif self.viewer_count > 0:
-            # Chỉ VIEW (tiết kiệm băng thông)
+            self.logger(f"[Client] ✅ Set CONTROL mode (30 FPS)")
+        else:
+            # LUÔN BẬT VIEW MODE - Không bao giờ IDLE
+            # Server cần screenshots liên tục để giám sát và lưu lại
             self.screenshot.set_mode(self.screenshot.MODE_VIEW)
             self.in_session = True
-        else:
-            # Không có session nào
-            self.screenshot.set_mode(self.screenshot.MODE_IDLE)
-            self.in_session = False
+            self.logger(f"[Client] ✅ Set VIEW mode (3s/frame) - Auto capture ON")
 
     def _on_control_pdu(self, pdu: dict):
         msg = pdu.get("message", "")
@@ -496,6 +489,10 @@ class Client:
         
         if msg.startswith("login_ok"):
             self.logger(f"[Client] Đăng nhập thành công! (User: {self.username}, Role: {self.role})")
+            # AUTO-ENABLE VIEW MODE - Bắt đầu gửi screenshots liên tục
+            self.screenshot.set_mode(self.screenshot.MODE_VIEW)
+            self.in_session = True
+            self.logger(f"[Client] ✅ Auto-enabled VIEW mode (3s/frame) - Continuous capture started")
             
         elif msg.startswith("login_fail"):
             self.logger("[Client] Đăng nhập thất bại!")
