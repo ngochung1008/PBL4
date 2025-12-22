@@ -111,20 +111,17 @@ class ManagerFileTransfer:
             chunk_size = 64 * 1024  # 64KB chunks
             total_sent = 0
             
+            seq = 1  # Sequence number
             while total_sent < len(file_data):
                 chunk = file_data[total_sent:total_sent + chunk_size]
                 
-                # Tạo file PDU
-                builder = PDUBuilder()
-                seq = self.app.next_seq() if hasattr(self.app, 'next_seq') else int(threading.current_thread().ident) & 0xFFFFFFFF
-                
-                # Build simple file chunk PDU
-                file_pdu_header = builder._hdr(seq, 5, 0)  # 5 = file type
-                file_pdu = file_pdu_header + chunk
+                # Build proper FILE_CHUNK PDU (type=11, not 5)
+                file_chunk_pdu = PDUBuilder.build_file_chunk(seq, total_sent, chunk)
+                seq += 1
                 
                 # Gửi qua network
                 if hasattr(self.app, 'network'):
-                    self.app.network.send_pdu(CHANNEL_FILE, file_pdu)
+                    self.app.network.send_pdu(CHANNEL_FILE, file_chunk_pdu)
                 
                 total_sent += len(chunk)
                 
