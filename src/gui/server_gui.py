@@ -113,8 +113,25 @@ class ServerWindow(QWidget):
     def open_profile(self):
         Token = QApplication.instance().current_user
         from src.model.Users import User
-        data = QApplication.instance().conn.client_profile(Token)
-        new_user = User(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+        user = QApplication.instance().conn.client_profile(Token)
+                # Xử lý user có thể là dict hoặc tuple từ database
+        if isinstance(user, (list, tuple)):
+            # Nếu là tuple từ DB: (UserID, Username, Password, FullName, Email, CreatedAt, LastLogin, Role)
+            new_user = {
+                'UserID': user[0] if len(user) > 0 else 'unknown',
+                'Username': user[1] if len(user) > 1 else 'user',
+                'FullName': user[3] if len(user) > 3 else 'User',
+                'Email': user[4] if len(user) > 4 else 'user@example.com',
+                'CreatedAt': user[5] if len(user) > 5 else '',
+                'LastLogin': user[6] if len(user) > 6 else '',
+                'Role': user[7] if len(user) > 7 else 'user'
+            }
+        elif isinstance(user, dict):
+            new_user = user
+        else:
+            # Fallback nếu không biết kiểu
+            new_user = {'UserID': 'unknown', 'Username': 'user', 'FullName': 'User', 'Email': 'user@example.com', 'Role': 'user'}
+        
         from src.gui.profile import ProfileWindow
         self.profile_window = ProfileWindow(new_user, Token)
         self.profile_window.show()
@@ -126,13 +143,13 @@ class ServerWindow(QWidget):
         self.close()
         
     def open_manage_screens(self):
-        from src.gui.manage_screens import ManageScreensWindow
-        self.screens_window = ManageScreensWindow()
-        self.screens_window.show()
+        from src.manager.gui.manage_clients import ManageClientsWindow
+        self.clients_window = ManageClientsWindow()
+        self.clients_window.show()
         self.close()
 
     def open_manage_clients(self):
-        from src.gui.manage_clients import ManageClientsWindow
+        from src.manager.gui.manage_clients import ManageClientsWindow
         self.clients_window = ManageClientsWindow()
         self.clients_window.show()
         self.close()
