@@ -628,6 +628,8 @@ class ClientWindow(QWidget):
                 'Username': user[1] if len(user) > 1 else 'user',
                 'FullName': user[3] if len(user) > 3 else 'User',
                 'Email': user[4] if len(user) > 4 else 'user@example.com',
+                'CreatedAt': user[5] if len(user) > 5 else '',
+                'LastLogin': user[6] if len(user) > 6 else '',
                 'Role': user[7] if len(user) > 7 else 'user'
             }
         elif isinstance(user, dict):

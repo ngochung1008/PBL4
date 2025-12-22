@@ -132,7 +132,7 @@ class ServerWindow(QWidget):
         self.close()
 
     def open_manage_clients(self):
-        from src.gui.manage_clients import ManageClientsWindow
+        from src.manager.gui.manage_clients import ManageClientsWindow
         self.clients_window = ManageClientsWindow()
         self.clients_window.show()
         self.close()
