@@ -74,12 +74,16 @@ class FileTransferHandler:
                     metadata_len = len(metadata_bytes)
                     
                     # Tạo file PDU: [metadata_len(4bytes)][metadata][file_data]
-                    file_pdu_header = session_manager.builder._hdr(session_manager._next_seq(), 5, 0)  # 5 = CHANNEL_FILE
                     file_pdu_body = struct.pack('>I', metadata_len) + metadata_bytes + complete_file
-                    file_pdu = file_pdu_header + file_pdu_body
                     
-                    # Gửi file tới receiver
-                    session_manager.broadcaster.send_raw(receiver_id, CHANNEL_FILE, file_pdu)
+                    # Build MCS frame with channel header + PDU body
+                    mcs_frame = session_manager.builder._channel_hdr(CHANNEL_FILE) + \
+                                session_manager.builder._hdr(session_manager._next_seq(), 5, 0) + \
+                                file_pdu_body
+                    
+                    # Gửi file tới receiver using enqueue
+                    print(f"[FileTransfer] Sending file PDU to {receiver_id}, size: {len(mcs_frame)} bytes")
+                    session_manager.broadcaster.enqueue(receiver_id, mcs_frame)
                     
                     # Update database
                     session_manager.file_transfer_manager.complete_transfer(transfer_id)

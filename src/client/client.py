@@ -613,12 +613,18 @@ class Client:
         self.network.send_control_pdu(f"permission_denied:file_transfer|Role: {self.role}")
     
     def send_file(self, target_id: str, filepath: str):
-        """GUI gọi method này để gửi file"""
+        """GUI gọi method này để gửi file (runs in background thread)"""
         print(f"[Client] ===== SENDING FILE =====")
         print(f"[Client] Target: {target_id}")
         print(f"[Client] File: {filepath}")
         self.logger(f"[Client] Sending file to {target_id}: {filepath}")
-        self.file_transfer.send_file(target_id, filepath)
+        
+        # Run in background thread to avoid GUI freeze
+        threading.Thread(
+            target=self.file_transfer.send_file,
+            args=(target_id, filepath),
+            daemon=True
+        ).start()
     
     def _on_disconnected(self):
         self.logger("[Client] _on_disconnected được gọi.")
