@@ -687,6 +687,10 @@ class ClientWindow(QWidget):
         self.client_service = None
         self.client_thread = None
         self.is_service_running = False
+        
+        # File transfer panel (sẽ được tạo khi mở File Transfer window)
+        self.file_transfer_panel = None
+        self.file_transfer_window = None
 
         self.init_ui()
 
@@ -1013,6 +1017,9 @@ class ClientWindow(QWidget):
             """)
             self.file_transfer_btn.setEnabled(True)
             
+            # Setup file transfer callbacks ngay khi client được tạo
+            self._setup_file_transfer_callbacks_early()
+            
             self.log_message("[GUI] Dịch vụ client đã được khởi động")
             
         except Exception as e:
@@ -1067,6 +1074,66 @@ class ClientWindow(QWidget):
             QMessageBox.critical(self, "Lỗi", f"Không thể dừng dịch vụ: {e}")
             self.log_message(f"[GUI] Lỗi khi dừng: {e}")
     
+    def _setup_file_transfer_callbacks_early(self):
+        """Setup file transfer callbacks ngay khi client được tạo - không cần mở File Transfer tab"""
+        if not self.client_service:
+            return
+        
+        # Progress callback - chạy ngay cả khi chưa mở panel
+        def on_progress(progress):
+            print(f"[Client] File transfer progress: {progress}%")
+            from PyQt6.QtCore import QTimer
+            def update():
+                if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
+                    self.file_transfer_panel.update_progress(progress)
+            QTimer.singleShot(0, update)
+        
+        # Complete callback
+        def on_complete():
+            print(f"[Client] File transfer complete!")
+            self.log_message("[Client] ✅ File sent successfully!")
+            from PyQt6.QtCore import QTimer
+            def update():
+                if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
+                    self.file_transfer_panel.update_progress(100)
+            QTimer.singleShot(0, update)
+        
+        # Error callback
+        def on_error(error_msg):
+            print(f"[Client] File transfer error: {error_msg}")
+            self.log_message(f"[Client] ❌ File transfer error: {error_msg}")
+        
+        # File received callback - quan trọng: hiển thị thông báo khi nhận được file
+        def on_file_received(filename, filepath):
+            print(f"[Client] ===== FILE RECEIVED =====")
+            print(f"[Client] Filename: {filename}")
+            print(f"[Client] Filepath: {filepath}")
+            self.log_message(f"[Client] 📁 Received file: {filename}")
+            
+            from PyQt6.QtCore import QTimer
+            from PyQt6.QtWidgets import QMessageBox
+            
+            def show_notification():
+                # Hiển thị thông báo cho user
+                QMessageBox.information(
+                    self, 
+                    "File Received", 
+                    f"Received file: {filename}\nSaved to: {filepath}"
+                )
+                # Cập nhật panel nếu có
+                if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
+                    self.file_transfer_panel.add_received_file(filename)
+            
+            QTimer.singleShot(0, show_notification)
+        
+        # Đăng ký callbacks
+        self.client_service.file_transfer.on_progress = on_progress
+        self.client_service.file_transfer.on_complete = on_complete
+        self.client_service.file_transfer.on_error = on_error
+        self.client_service.file_transfer.on_file_received = on_file_received
+        
+        print("[Client] ✅ File transfer callbacks registered early")
+    
     def log_message(self, message):
         """Log messages từ backend service"""
         print(message)
@@ -1100,11 +1167,8 @@ class ClientWindow(QWidget):
         # Connect signals
         self.file_transfer_panel.file_send_requested.connect(self.on_file_send_requested)
         
-        # Setup file transfer callbacks
-        self.client_service.file_transfer.on_progress = self.on_file_send_progress
-        self.client_service.file_transfer.on_complete = self.on_file_send_complete
-        self.client_service.file_transfer.on_error = self.on_file_send_error
-        self.client_service.file_transfer.on_file_received = self.on_file_received
+        # Note: Callbacks đã được setup trong _setup_file_transfer_callbacks_early()
+        # Không cần ghi đè ở đây nữa
         
         self.file_transfer_window.show()
     
