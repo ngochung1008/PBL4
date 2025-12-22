@@ -19,13 +19,13 @@ class ClientFileTransfer:
         """
         self.sender = sender
         self.receiver = receiver
-        self.on_file_received = None  # Callback khi nhận file
-        self.on_file_send_progress = None  # Callback khi gửi file
-        self.on_file_send_complete = None  # Callback khi gửi xong
-        self.on_file_send_error = None  # Callback khi lỗi
+        self.on_file_received = None  # Callback khi nhận file (filename, filepath)
+        self.on_progress = None  # Callback progress (int)
+        self.on_complete = None  # Callback khi gửi xong ()
+        self.on_error = None  # Callback khi lỗi (error_msg)
         
         # Storage cho received files
-        self.received_files_dir = "received_files"
+        self.received_files_dir = "src/client/file_transfer/received"
         os.makedirs(self.received_files_dir, exist_ok=True)
         
         # Active transfers
@@ -45,8 +45,8 @@ class ClientFileTransfer:
         """
         if not os.path.exists(filepath):
             print(f"[ClientFileTransfer] File không tồn tại: {filepath}")
-            if self.on_file_send_error:
-                self.on_file_send_error("File không tồn tại")
+            if self.on_error:
+                self.on_error("File không tồn tại")
             return False
         
         try:
@@ -92,18 +92,42 @@ class ClientFileTransfer:
             
         except Exception as e:
             print(f"[ClientFileTransfer] Error sending file: {e}")
-            if self.on_file_send_error:
-                self.on_file_send_error(str(e))
+            if self.on_error:
+                self.on_error(str(e))
             return False
     
-    def handle_file_transfer_ack(self, transfer_id: str):
+    def handle_file_transfer_ack(self, message: str):
         """
         Xử lý ACK từ server - bắt đầu gửi file data
+        
+        Args:
+            message: Message dạng "file_transfer_start:transfer_id" hoặc "file_transfer_ack:..."
         """
+        # Parse message
+        parts = message.split(":")
+        if len(parts) < 2:
+            print(f"[ClientFileTransfer] Invalid ACK message: {message}")
+            return
+        
+        cmd = parts[0]
+        transfer_id = parts[1] if len(parts) > 1 else "0"
+        
+        if cmd == "file_transfer_start":
+            # Server đã sẵn sàng nhận file
+            print(f"[ClientFileTransfer] Received file_transfer_start ACK for transfer #{transfer_id}")
+            self._send_file_chunks()
+        elif cmd == "file_transfer_ack":
+            # Progress update
+            print(f"[ClientFileTransfer] Received progress ACK: {message}")
+        else:
+            print(f"[ClientFileTransfer] Unknown ACK command: {cmd}")
+    
+    def _send_file_chunks(self):
+        """Gửi file data chunks sau khi nhận ACK"""
         with self.lock:
             # Tìm pending transfer (có thể dùng target_id làm key tạm thời)
             if not self.active_sends:
-                print(f"[ClientFileTransfer] No active sends for transfer #{transfer_id}")
+                print(f"[ClientFileTransfer] No active sends to process")
                 return
             
             # Lấy transfer đầu tiên (giả sử chỉ gửi 1 file tại 1 thời điểm)
@@ -140,9 +164,9 @@ class ClientFileTransfer:
                 total_sent += len(chunk)
                 
                 # Report progress
-                if self.on_file_send_progress:
+                if self.on_progress:
                     progress = int(total_sent * 100 / len(file_data))
-                    self.on_file_send_progress(progress)
+                    self.on_progress(progress)
                 
                 print(f"[ClientFileTransfer] Sent {total_sent}/{len(file_data)} bytes")
             
@@ -150,8 +174,8 @@ class ClientFileTransfer:
             
         except Exception as e:
             print(f"[ClientFileTransfer] Error sending file data: {e}")
-            if self.on_file_send_error:
-                self.on_file_send_error(str(e))
+            if self.on_error:
+                self.on_error(str(e))
     
     def handle_file_received(self, metadata: dict, file_data: bytes):
         """
@@ -184,10 +208,34 @@ class ClientFileTransfer:
             
             # Callback
             if self.on_file_received:
-                self.on_file_received(filename, save_path, sender_id)
+                self.on_file_received(safe_filename, save_path)
             
         except Exception as e:
             print(f"[ClientFileTransfer] Error saving received file: {e}")
+    
+    def handle_file_pdu(self, pdu: dict):
+        """
+        Xử lý FILE PDU từ server - nhận file chunks
+        
+        Args:
+            pdu: Dict chứa file data từ server
+        """
+        try:
+            # Giả sử pdu có dạng: {'data': bytes, 'metadata': {...}}
+            file_data = pdu.get('data', b'')
+            metadata = pdu.get('metadata', {})
+            
+            if file_data:
+                print(f"[ClientFileTransfer] Received file PDU: {len(file_data)} bytes")
+                # Nhận và lưu file
+                self.handle_file_received(metadata, file_data)
+            else:
+                print(f"[ClientFileTransfer] Empty file PDU received")
+                
+        except Exception as e:
+            print(f"[ClientFileTransfer] Error handling file PDU: {e}")
+            if self.on_error:
+                self.on_error(f"Error receiving file: {e}")
     
     def handle_transfer_complete(self, transfer_id: str, filename: str):
         """Xử lý thông báo transfer hoàn thành"""
@@ -201,8 +249,8 @@ class ClientFileTransfer:
                     del self.active_sends[target_id]
                     break
         
-        if self.on_file_send_complete:
-            self.on_file_send_complete(filename)
+        if self.on_complete:
+            self.on_complete()
     
     def handle_transfer_error(self, error_msg: str):
         """Xử lý lỗi transfer"""
@@ -212,5 +260,5 @@ class ClientFileTransfer:
         with self.lock:
             self.active_sends.clear()
         
-        if self.on_file_send_error:
-            self.on_file_send_error(error_msg)
+        if self.on_error:
+            self.on_error(error_msg)

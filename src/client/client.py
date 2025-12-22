@@ -582,11 +582,15 @@ class Client:
             # Format: "file_transfer_ack:chunk_num"
             self.file_transfer.handle_file_transfer_ack(msg)
         elif msg.startswith("file_transfer_complete"):
-            # Format: "file_transfer_complete:transfer_id"
-            self.file_transfer.handle_file_received(msg)
+            # Format: "file_transfer_complete:transfer_id:filename"
+            parts = msg.split(":")
+            transfer_id = parts[1] if len(parts) > 1 else "0"
+            filename = parts[2] if len(parts) > 2 else "unknown"
+            self.file_transfer.handle_transfer_complete(transfer_id, filename)
         elif msg.startswith("file_transfer_error"):
             # Format: "file_transfer_error:error_message"
-            self.logger(f"[Client] File transfer error: {msg}")
+            error_msg = ":".join(msg.split(":")[1:])
+            self.file_transfer.handle_transfer_error(error_msg)
     
     def _on_file_pdu(self, pdu: dict):
         """Xử lý FILE PDU từ server"""
