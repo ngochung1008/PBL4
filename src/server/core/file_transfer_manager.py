@@ -38,126 +38,63 @@ class FileTransferManager:
                               filename: str, filesize: int,
                               file_hash: Optional[str] = None) -> Optional[int]:
         """
-        Tạo bản ghi transfer mới trong database
-        Returns: transfer_id nếu thành công, None nếu thất bại
+        Tạo bản ghi transfer mới - không lưu database, chỉ tạo ID tạm
+        Returns: transfer_id (timestamp-based)
         """
-        conn = self._get_db_connection()
-        if not conn:
-            return None
-            
-        try:
-            cursor = conn.cursor()
-            sql = """
-                INSERT INTO file_transfers 
-                (sender_id, sender_type, receiver_id, receiver_type, 
-                 filename, filesize, file_hash, status, transfer_started_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(sql, (
-                sender_id, sender_type, receiver_id, receiver_type,
-                filename, filesize, file_hash, 'sending', datetime.now()
-            ))
-            conn.commit()
-            transfer_id = cursor.lastrowid
-            
-            print(f"[FileTransferManager] Created transfer record #{transfer_id}: "
-                  f"{sender_id}({sender_type}) -> {receiver_id}({receiver_type}): {filename}")
-            
-            return transfer_id
-        except Exception as e:
-            print(f"[FileTransferManager] Error creating transfer record: {e}")
-            return None
-        finally:
-            cursor.close()
-            conn.close()
+        import time
+        
+        # Tạo transfer_id từ timestamp (không cần database)
+        transfer_id = int(time.time() * 1000) % 1000000  # 6 digits
+        
+        # Lưu vào memory thay vì database
+        self.active_transfers[transfer_id] = {
+            'sender_id': sender_id,
+            'sender_type': sender_type,
+            'receiver_id': receiver_id,
+            'receiver_type': receiver_type,
+            'filename': filename,
+            'filesize': filesize,
+            'file_hash': file_hash,
+            'status': 'sending',
+            'started_at': datetime.now()
+        }
+        
+        print(f"[FileTransferManager] Created transfer #{transfer_id} (in-memory): "
+              f"{sender_id}({sender_type}) -> {receiver_id}({receiver_type}): {filename}")
+        
+        return transfer_id
     
     def update_transfer_status(self, transfer_id: int, status: str, 
                               error_message: Optional[str] = None):
-        """Cập nhật trạng thái transfer"""
-        conn = self._get_db_connection()
-        if not conn:
-            return
-            
-        try:
-            cursor = conn.cursor()
-            
-            if status == 'completed':
-                sql = """
-                    UPDATE file_transfers 
-                    SET status = %s, transfer_completed_at = %s
-                    WHERE id = %s
-                """
-                cursor.execute(sql, (status, datetime.now(), transfer_id))
-            elif status == 'failed':
-                sql = """
-                    UPDATE file_transfers 
-                    SET status = %s, error_message = %s, transfer_completed_at = %s
-                    WHERE id = %s
-                """
-                cursor.execute(sql, (status, error_message, datetime.now(), transfer_id))
-            else:
-                sql = "UPDATE file_transfers SET status = %s WHERE id = %s"
-                cursor.execute(sql, (status, transfer_id))
-            
-            conn.commit()
+        """Cập nhật trạng thái transfer - chỉ in-memory, không database"""
+        if transfer_id in self.active_transfers:
+            self.active_transfers[transfer_id]['status'] = status
+            if error_message:
+                self.active_transfers[transfer_id]['error_message'] = error_message
+            if status in ('completed', 'failed'):
+                self.active_transfers[transfer_id]['completed_at'] = datetime.now()
             print(f"[FileTransferManager] Updated transfer #{transfer_id} status: {status}")
-            
-        except Exception as e:
-            print(f"[FileTransferManager] Error updating transfer status: {e}")
-        finally:
-            cursor.close()
-            conn.close()
+        else:
+            print(f"[FileTransferManager] Transfer #{transfer_id} not found in memory")
     
     def get_transfer_history(self, entity_id: str, entity_type: str, 
                            limit: int = 50) -> list:
         """
-        Lấy lịch sử transfer của một entity (manager hoặc client)
+        Lấy lịch sử transfer từ memory (không dùng database)
         """
-        conn = self._get_db_connection()
-        if not conn:
-            return []
-            
-        try:
-            cursor = conn.cursor(dictionary=True)
-            sql = """
-                SELECT * FROM file_transfers 
-                WHERE (sender_id = %s AND sender_type = %s) 
-                   OR (receiver_id = %s AND receiver_type = %s)
-                ORDER BY created_at DESC
-                LIMIT %s
-            """
-            cursor.execute(sql, (entity_id, entity_type, entity_id, entity_type, limit))
-            results = cursor.fetchall()
-            return results
-        except Exception as e:
-            print(f"[FileTransferManager] Error getting transfer history: {e}")
-            return []
-        finally:
-            cursor.close()
-            conn.close()
+        results = []
+        for tid, info in self.active_transfers.items():
+            if (info.get('sender_id') == entity_id and info.get('sender_type') == entity_type) or \
+               (info.get('receiver_id') == entity_id and info.get('receiver_type') == entity_type):
+                results.append({'id': tid, **info})
+        return results[:limit]
     
     def get_all_transfers(self, limit: int = 100) -> list:
-        """Lấy tất cả lịch sử transfer (cho admin)"""
-        conn = self._get_db_connection()
-        if not conn:
-            return []
-            
-        try:
-            cursor = conn.cursor(dictionary=True)
-            sql = """
-                SELECT * FROM file_transfers 
-                ORDER BY created_at DESC
-                LIMIT %s
-            """
-            cursor.execute(sql, (limit,))
-            results = cursor.fetchall()
-            return results
-        except Exception as e:
-            print(f"[FileTransferManager] Error getting all transfers: {e}")
-            return []
-        finally:
-            cursor.close()
-            conn.close()
+        """Lấy tất cả lịch sử transfer từ memory"""
+        results = []
+        for tid, info in self.active_transfers.items():
+            results.append({'id': tid, **info})
+        return results[:limit]
     
     def calculate_file_hash(self, file_data: bytes) -> str:
         """Tính SHA256 hash của file"""

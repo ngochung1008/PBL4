@@ -578,6 +578,8 @@ class SessionManager(threading.Thread):
                     
                 except Exception as e:
                     print(f"[FileTransfer] Error handling send_file: {e}")
+                    import traceback
+                    traceback.print_exc()
                     self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Server error")
             
             # 9. Xử lý Yêu cầu Kết nối (Manager -> Client) - DEPRECATED, dùng view/control
