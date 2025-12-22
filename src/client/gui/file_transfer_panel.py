@@ -104,23 +104,18 @@ class ClientFileTransferPanel(QWidget):
         self.send_btn.clicked.connect(self.send_file)
         send_layout.addWidget(self.send_btn)
         
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #404040;
-                border-radius: 4px;
-                background-color: #282828;
-                text-align: center;
-                color: white;
-            }
-            QProgressBar::chunk {
-                background-color: #1DB954;
-                border-radius: 3px;
+        # Status label (thay thế progress bar)
+        self.status_label = QLabel("")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #1DB954;
+                font-size: 11pt;
+                padding: 8px;
+                font-weight: bold;
             }
         """)
-        send_layout.addWidget(self.progress_bar)
+        send_layout.addWidget(self.status_label)
         
         send_section.setLayout(send_layout)
         send_section.setStyleSheet("""
@@ -250,22 +245,30 @@ class ClientFileTransferPanel(QWidget):
         # Target ID = "server" (server sẽ forward đến manager hiện tại)
         target_id = "server"
         
-        # Show progress bar
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
+        # Hiển thị trạng thái đang gửi
+        filename = os.path.basename(self.selected_file)
+        self.status_label.setStyleSheet("color: #FFA500; font-size: 11pt; padding: 8px; font-weight: bold;")
+        self.status_label.setText(f"⏳ Đang gửi: {filename}...")
         self.send_btn.setEnabled(False)
         
         # Emit signal
         self.file_send_requested.emit(target_id, self.selected_file)
         
     def update_progress(self, progress: int):
-        """Cập nhật progress bar"""
-        self.progress_bar.setValue(progress)
+        """Cập nhật trạng thái gửi file"""
         if progress >= 100:
-            self.progress_bar.setVisible(False)
+            # Gửi thành công
+            self.status_label.setStyleSheet("color: #1DB954; font-size: 11pt; padding: 8px; font-weight: bold;")
+            self.status_label.setText("✅ Gửi file thành công!")
             self.send_btn.setEnabled(True)
             self.file_label.setText("No file selected")
             self.selected_file = None
+    
+    def show_error(self, error_msg: str):
+        """Hiển thị lỗi"""
+        self.status_label.setStyleSheet("color: #FF4444; font-size: 11pt; padding: 8px; font-weight: bold;")
+        self.status_label.setText(f"❌ Lỗi: {error_msg}")
+        self.send_btn.setEnabled(True)
             
     def load_received_files(self):
         """Load danh sách file đã nhận"""

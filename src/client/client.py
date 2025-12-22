@@ -1170,42 +1170,24 @@ class ClientWindow(QWidget):
         # Connect signals
         self.file_transfer_panel.file_send_requested.connect(self.on_file_send_requested)
         
-        # Status label để hiển thị trạng thái
-        self.file_status_label = QLabel("")
-        self.file_status_label.setStyleSheet("color: #1DB954; font-size: 11pt; padding: 5px;")
-        self.file_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.file_status_label)
-        
         # Re-connect callbacks to update this specific panel
         if self.client_service and self.client_service.file_transfer:
-            # Progress callback
-            def on_progress(progress):
-                from PyQt6.QtCore import QTimer
-                def update():
-                    if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
-                        self.file_transfer_panel.update_progress(progress)
-                QTimer.singleShot(0, update)
-            
-            # Complete callback
+            # Complete callback - hiển thị trạng thái thành công
             def on_complete():
                 from PyQt6.QtCore import QTimer
                 def update():
                     if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
                         self.file_transfer_panel.update_progress(100)
-                    if hasattr(self, 'file_status_label') and self.file_status_label:
-                        self.file_status_label.setText("✅ File sent successfully!")
                 QTimer.singleShot(0, update)
             
-            # Error callback
+            # Error callback - hiển thị lỗi
             def on_error(error_msg):
                 from PyQt6.QtCore import QTimer
                 def update():
-                    if hasattr(self, 'file_status_label') and self.file_status_label:
-                        self.file_status_label.setStyleSheet("color: #FF4444; font-size: 11pt; padding: 5px;")
-                        self.file_status_label.setText(f"❌ Error: {error_msg}")
+                    if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
+                        self.file_transfer_panel.show_error(error_msg)
                 QTimer.singleShot(0, update)
             
-            self.client_service.file_transfer.on_progress = on_progress
             self.client_service.file_transfer.on_complete = on_complete
             self.client_service.file_transfer.on_error = on_error
         
