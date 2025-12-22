@@ -21,7 +21,11 @@ class ClientFileTransferPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_file = None
-        self.received_files_dir = "src/client/file_transfer/received"
+        # Sử dụng đường dẫn tuyệt đối
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        self.received_files_dir = os.path.join(base_dir, "src", "client", "file_transfer", "received")
+        # Tạo thư mục nếu chưa tồn tại
+        os.makedirs(self.received_files_dir, exist_ok=True)
         self.init_ui()
         self.load_received_files()
         
