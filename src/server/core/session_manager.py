@@ -535,7 +535,7 @@ class SessionManager(threading.Thread):
                                     receiver_id = cid
                                     receiver_type = role
                                     print(f"[FileTransfer] Found manager: {cid}")
-                                    self.logger(f"[Server] Auto-selected manager {cid} for file transfer from {client_id}")
+                                    print(f"[Server] Auto-selected manager {cid} for file transfer from {client_id}")
                                     break
                     else:
                         # Normal case: find by username or client_id
