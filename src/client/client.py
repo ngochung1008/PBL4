@@ -935,6 +935,7 @@ class ClientWindow(QWidget):
     
     def update_list_ui(self, new_list):
         """Cập nhật UI danh sách client (được gọi từ signal)"""
+        print(f"[Client] 📋 Nhận danh sách manager: {new_list}")
         self.client_list = new_list
         self.render_client_list()
 

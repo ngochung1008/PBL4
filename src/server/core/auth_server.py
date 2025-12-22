@@ -226,20 +226,22 @@ def handle_end_connect(conn):
 
 def handle_list_clients_connected(conn):
     token = read_field(conn).decode("utf-8")
+    print(':::: ', client_litst.get(token, []))
+    
+    # Luôn lấy danh sách mới từ database
     clients_list = auth.get_clients_connected(token)
-    print(' ---> ',client_litst)
-    if same.get(token) is not None and same[token] == 0:
-        send_message(conn, 0)
-        return
-    else:
-        clients_list = auth.get_clients_connected(token)
-        cur = []
-        for x in clients_list:
+    cur = []
+    for x in clients_list:
+        if x[0] in token_username:
             name = token_username[x[0]]
             status = x[1]
             cur.append({"name": name, "allowed": status})
-        client_litst[token] = cur
-        same[token] = 1
+    
+    # Cập nhật cache
+    client_litst[token] = cur
+    same[token] = 1
+    
+    print(':::: ', cur)
     send_json(conn, 1, cur)
 
 def handle_check_connected_status(conn):
