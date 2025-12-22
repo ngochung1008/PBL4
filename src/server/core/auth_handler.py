@@ -145,6 +145,17 @@ def log_out(session_id):
         """, (session_id,))
         conn.commit()
         
+        # Cập nhật EndTime cho tất cả View sessions liên quan
+        # (cả khi user là manager hoặc client)
+        cursor.execute("""
+            UPDATE View
+            SET EndTime = CURRENT_TIMESTAMP
+            WHERE (SessionServerId = %s OR SessionClientId = %s)
+            AND EndTime IS NULL
+        """, (session_id, session_id))
+        conn.commit()
+        print(f"[Logout] Đã cập nhật EndTime cho View sessions của {session_id}")
+        
     except Exception as e:
         print("Lỗi:", e)
     finally:
@@ -441,9 +452,12 @@ def get_clients_connected(token):
         )
         cursor = conn.cursor()
 
+        # Chỉ lấy các View session còn active (EndTime IS NULL)
         cursor.execute("""
-            SELECT SessionServerId, Status FROM View 
+            SELECT SessionServerId, Status 
+            FROM View 
             WHERE SessionClientId = %s 
+            AND EndTime IS NULL
         """, (token,))
 
         rows = cursor.fetchall()
