@@ -143,9 +143,9 @@ class ServerWindow(QWidget):
         self.close()
         
     def open_manage_screens(self):
-        from src.gui.manage_screens import ManageScreensWindow
-        self.screens_window = ManageScreensWindow()
-        self.screens_window.show()
+        from src.manager.gui.manage_clients import ManageClientsWindow
+        self.clients_window = ManageClientsWindow()
+        self.clients_window.show()
         self.close()
 
     def open_manage_clients(self):
