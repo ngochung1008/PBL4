@@ -36,7 +36,14 @@ class FileTransferHandler:
                 print(f"[FileTransfer] No file data in PDU from {sender_id}, type={pdu_type}")
                 return
             
-            # Kiểm tra xem có pending transfer không
+            # Prepare variables for use outside lock
+            should_forward = False
+            file_data_with_metadata = None
+            transfer_id = None
+            receiver_id = None
+            filename = None
+            
+            # Kiểm tra và update pending transfer (trong lock)
             with session_manager.lock:
                 print(f"[FileTransfer] Pending transfers: {list(session_manager.pending_file_transfers.keys())}")
                 if sender_id not in session_manager.pending_file_transfers:
@@ -72,10 +79,9 @@ class FileTransferHandler:
                             del session_manager.pending_file_transfers[sender_id]
                             return
                     
-                    # Forward file tới receiver
+                    # Prepare metadata
                     print(f"[FileTransfer] Forwarding file to {receiver_id}")
                     
-                    # Tạo metadata JSON
                     metadata = {
                         'filename': filename,
                         'filesize': len(complete_file),
@@ -85,17 +91,30 @@ class FileTransferHandler:
                     metadata_bytes = json.dumps(metadata).encode('utf-8')
                     metadata_len = len(metadata_bytes)
                     
-                    # Tạo file data với metadata prefix: [metadata_len(4bytes)][metadata][file_data]
+                    # Tạo file data với metadata prefix
                     file_data_with_metadata = struct.pack('>I', metadata_len) + metadata_bytes + complete_file
                     
-                    # Gửi qua file chunks với proper PDU format
+                    # Xóa khỏi pending
+                    del session_manager.pending_file_transfers[sender_id]
+                    should_forward = True
+                else:
+                    # Chưa nhận đủ - gửi ACK
+                    progress = int(transfer_info['received_bytes'] * 100 / filesize)
+                    session_manager._send_control_pdu(sender_id, 
+                        f"{CMD_FILE_TRANSFER_ACK}:{transfer_id}:{progress}")
+                    return
+            
+            # NGOÀI LOCK - Forward file tới receiver
+            if should_forward and file_data_with_metadata:
+                try:
                     from src.common.network.pdu_builder import PDUBuilder
                     from src.common.network.mcs_layer import MCSLite
-                    from src.common.network.tpkt_layer import TPKTLayer
                     
                     chunk_size = 64 * 1024  # 64KB chunks
                     total_sent = 0
                     seq = session_manager._next_seq()
+                    
+                    print(f"[FileTransfer] Starting to send {len(file_data_with_metadata)} bytes to {receiver_id}")
                     
                     while total_sent < len(file_data_with_metadata):
                         chunk = file_data_with_metadata[total_sent:total_sent + chunk_size]
@@ -110,8 +129,9 @@ class FileTransferHandler:
                         # Gửi tới receiver
                         session_manager.broadcaster.enqueue(receiver_id, mcs_frame)
                         total_sent += len(chunk)
+                        print(f"[FileTransfer] Sent chunk: {total_sent}/{len(file_data_with_metadata)} bytes")
                     
-                    print(f"[FileTransfer] Sent file to {receiver_id}, total size: {len(file_data_with_metadata)} bytes")
+                    print(f"[FileTransfer] ✅ Sent file to {receiver_id}, total size: {len(file_data_with_metadata)} bytes")
                     
                     # Update database
                     session_manager.file_transfer_manager.complete_transfer(transfer_id)
@@ -122,15 +142,13 @@ class FileTransferHandler:
                     session_manager._send_control_pdu(receiver_id, 
                         f"{CMD_FILE_TRANSFER_COMPLETE}:{filename}:Từ {session_manager.authenticated_users.get(sender_id, sender_id)}")
                     
-                    # Cleanup
-                    del session_manager.pending_file_transfers[sender_id]
-                    
                     print(f"[FileTransfer] Transfer #{transfer_id} completed: {filename}")
-                else:
-                    # Gửi ACK để sender biết đã nhận chunk
-                    progress = int(transfer_info['received_bytes'] * 100 / filesize)
-                    session_manager._send_control_pdu(sender_id, 
-                        f"{CMD_FILE_TRANSFER_ACK}:{transfer_id}:{progress}")
+                    
+                except Exception as send_error:
+                    print(f"[FileTransfer] Error sending file to receiver: {send_error}")
+                    import traceback
+                    traceback.print_exc()
+                    session_manager._send_control_pdu(sender_id, f"{CMD_FILE_TRANSFER_ERROR}:Failed to send to receiver")
         
         except Exception as e:
             print(f"[FileTransfer] Error handling file PDU: {e}")
