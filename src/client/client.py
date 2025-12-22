@@ -1136,8 +1136,8 @@ class ClientWindow(QWidget):
         print(f"[ClientWindow] Filepath: {filepath}")
         print(f"[ClientWindow] File exists: {os.path.exists(filepath)}")
         
-        # Schedule GUI update on main thread
-        from PyQt6.QtCore import QMetaObject, Qt
+        # Use timer to schedule GUI update on main thread (thread-safe)
+        from PyQt6.QtCore import QTimer
         
         def update_gui():
             if hasattr(self, 'file_transfer_panel'):
@@ -1147,8 +1147,8 @@ class ClientWindow(QWidget):
             self.log_message(f"[GUI] ✅ File received: {filename} at {filepath}")
             QMessageBox.information(self, "File Received", f"Received file: {filename}\n\nSaved to: {filepath}")
         
-        # Invoke on main thread
-        QMetaObject.invokeMethod(self, update_gui, Qt.ConnectionType.QueuedConnection)
+        # Schedule on main thread using QTimer (0ms = next event loop iteration)
+        QTimer.singleShot(0, update_gui)
     
     def closeEvent(self, event):
         """Xử lý sự kiện đóng cửa sổ"""
