@@ -1088,10 +1088,13 @@ class ClientWindow(QWidget):
                     self.file_transfer_panel.update_progress(progress)
             QTimer.singleShot(0, update)
         
-        # Complete callback
+        # Complete callback - chỉ gọi khi GỬI file xong
         def on_complete():
             print(f"[Client] File transfer complete!")
-            self.log_message("[Client] ✅ File sent successfully!")
+            # Chỉ hiện "sent" nếu thực sự đang gửi file (có active_sends)
+            if hasattr(self.client_service.file_transfer, 'active_sends'):
+                if self.client_service.file_transfer.active_sends:
+                    self.log_message("[Client] ✅ File sent successfully!")
             from PyQt6.QtCore import QTimer
             def update():
                 if hasattr(self, 'file_transfer_panel') and self.file_transfer_panel:
