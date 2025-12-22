@@ -114,8 +114,22 @@ def handle_logout(conn):
         user_info = auth.get_user_by_id(userid)
         if user_info:
             username = user_info[1]
+            # Xóa khỏi tất cả các danh sách
             clients.pop(username, None)
             token_username.pop(token, None)
+            client_litst.pop(token, None)
+            same.pop(token, None)
+            
+            # Xóa manager này khỏi danh sách connected của các client khác
+            for client_token in list(client_litst.keys()):
+                client_litst[client_token] = [
+                    x for x in client_litst[client_token] 
+                    if x.get('name') != username
+                ]
+                # Reset same flag để client refresh lại danh sách
+                same[client_token] = 0
+            
+            print(f"[LOGOUT] User {username} logged out, removed from all lists")
             send_json(conn, 1, user)
         else:
             send_message(conn, 0)

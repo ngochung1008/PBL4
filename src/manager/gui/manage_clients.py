@@ -249,20 +249,21 @@ class ManageClientsWindow(QWidget):
         self.close()
     
     def closeEvent(self, event):
-        """Xử lý sự kiện đóng cửa sổ - tự động logout"""
-        reply = QMessageBox.question(
-            self, 
-            'Xác nhận', 
-            'Bạn có muốn đăng xuất và thoát?',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
+        # """Xử lý sự kiện đóng cửa sổ - tự động logout"""
+        # reply = QMessageBox.question(
+        #     self, 
+        #     'Xác nhận', 
+        #     'Bạn có muốn đăng xuất và thoát?',
+        #     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        #     QMessageBox.StandardButton.No
+        # )
         
-        if reply == QMessageBox.StandardButton.Yes:
-            self._perform_logout()
-            event.accept()
-        else:
-            event.ignore()
+        # if reply == QMessageBox.StandardButton.Yes:
+        #     self._perform_logout()
+        #     event.accept()
+        # else:
+        #     event.ignore()
+        pass
     
     def _perform_logout(self):
         """Thực hiện logout - cập nhật EndTime trong database"""
