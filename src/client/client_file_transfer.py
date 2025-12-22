@@ -160,8 +160,7 @@ class ClientFileTransfer:
             
         except Exception as e:
             print(f"[ClientFileTransfer] Error sending file data: {e}")
-            if self.on_error:
-                self.on_error(str(e))
+            self._call_error_callback(str(e))
     
     def handle_file_received(self, metadata: dict, file_data: bytes):
         """
@@ -247,8 +246,7 @@ class ClientFileTransfer:
             print(f"[ClientFileTransfer] Error handling file PDU: {e}")
             import traceback
             traceback.print_exc()
-            if self.on_error:
-                self.on_error(f"Error receiving file: {e}")
+            self._call_error_callback(f"Error receiving file: {e}")
     
     def _call_progress_callback(self, progress: int):
         """Thread-safe progress callback"""
@@ -288,5 +286,4 @@ class ClientFileTransfer:
         with self.lock:
             self.active_sends.clear()
         
-        if self.on_error:
-            self.on_error(error_msg)
+        self._call_error_callback(error_msg)

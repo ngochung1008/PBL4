@@ -1114,20 +1114,35 @@ class ClientWindow(QWidget):
             self.client_service.send_file(target_id, filepath)
     
     def on_file_send_progress(self, progress: int):
-        """File send progress callback"""
-        if hasattr(self, 'file_transfer_panel'):
-            self.file_transfer_panel.update_progress(progress)
+        """File send progress callback - thread-safe"""
+        from PyQt6.QtCore import QTimer
+        
+        def update_progress():
+            if hasattr(self, 'file_transfer_panel'):
+                self.file_transfer_panel.update_progress(progress)
+        
+        QTimer.singleShot(0, update_progress)
     
     def on_file_send_complete(self):
-        """File send complete callback"""
-        if hasattr(self, 'file_transfer_panel'):
-            self.file_transfer_panel.update_progress(100)
-        self.log_message("[GUI] File sent successfully!")
+        """File send complete callback - thread-safe"""
+        from PyQt6.QtCore import QTimer
+        
+        def update_complete():
+            if hasattr(self, 'file_transfer_panel'):
+                self.file_transfer_panel.update_progress(100)
+            self.log_message("[GUI] File sent successfully!")
+        
+        QTimer.singleShot(0, update_complete)
     
     def on_file_send_error(self, error_msg: str):
-        """File send error callback"""
-        QMessageBox.critical(self, "File Transfer Error", f"Failed to send file: {error_msg}")
-        self.log_message(f"[GUI] File send error: {error_msg}")
+        """File send error callback - thread-safe"""
+        from PyQt6.QtCore import QTimer
+        
+        def show_error():
+            QMessageBox.critical(self, "File Transfer Error", f"Failed to send file: {error_msg}")
+            self.log_message(f"[GUI] File send error: {error_msg}")
+        
+        QTimer.singleShot(0, show_error)
     
     def on_file_received(self, filename: str, filepath: str):
         """File received callback - called from network thread, needs thread-safe GUI update"""

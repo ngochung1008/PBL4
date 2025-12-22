@@ -414,7 +414,7 @@ class Manager(QObject):
 
 if __name__ == "__main__":
     # 1. Cấu hình
-    HOST = "10.10.48.60"
+    HOST = "10.10.49.186"
     PORT = 5000
     MANAGER_ID = "manager_gui_1"
 
