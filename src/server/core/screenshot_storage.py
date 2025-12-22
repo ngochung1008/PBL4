@@ -137,13 +137,18 @@ class ScreenshotStorage:
             Đường dẫn file đã lưu hoặc None nếu không lưu
         """
         try:
+            print(f"[ScreenshotStorage] 🔍 Received frame from {client_name}, size: {len(raw_payload)} bytes")
+            
             # Parse header để lấy type
             if len(raw_payload) < 14:  # Share header = 14 bytes
+                print(f"[ScreenshotStorage] ⚠️ Payload too short: {len(raw_payload)} bytes")
                 return None
             
             # Read header: seq (4), timestamp (8), type (1), flags (1)
             seq, ts_ms, ptype, flags = struct.unpack_from(">IQBB", raw_payload)
             offset = 14
+            
+            print(f"[ScreenshotStorage] Frame details: seq={seq}, type={ptype} ({'FULL' if ptype == 1 else 'RECT' if ptype == 2 else 'UNKNOWN'})")
             
             # XỬ LÝ FULL FRAME (type = 1)
             if ptype == 1:

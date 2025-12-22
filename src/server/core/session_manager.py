@@ -241,11 +241,20 @@ class SessionManager(threading.Thread):
                     # Lấy username của client từ authenticated_users
                     client_username = self.authenticated_users.get(client_id)
                     if client_username:
+                        print(f"[SessionManager] 📸 Received {pdu_type} frame from {client_username}, saving...")
                         # Lưu screenshot (không block thread chính)
                         try:
-                            self.screenshot_storage.save_screenshot_from_raw(client_username, raw_payload)
+                            result = self.screenshot_storage.save_screenshot_from_raw(client_username, raw_payload)
+                            if result:
+                                print(f"[SessionManager] ✅ Screenshot saved: {result}")
+                            else:
+                                print(f"[SessionManager] ⚠️ Screenshot not saved (may be filtered)")
                         except Exception as e:
-                            print(f"[SessionManager] ERROR saving screenshot for {client_username}: {e}")
+                            print(f"[SessionManager] ❌ ERROR saving screenshot for {client_username}: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    else:
+                        print(f"[SessionManager] ⚠️ No username found for client_id {client_id}")
                 
                 with self.lock:
                     # 1. Broadcast tới tất cả viewers (nếu có)
@@ -378,6 +387,10 @@ class SessionManager(threading.Thread):
                     
                     self._send_control_pdu(client_id, f"{CMD_LOGIN_OK}:client")
                     self._broadcast_client_list()
+                    
+                    # TỰ ĐỘNG BẬT SCREEN SHARING cho client này
+                    print(f"[ScreenshotStorage] Auto-enabling screen capture for {username}")
+                    self._auto_enable_screen_capture(client_id)
                     
                     # Check if there's a pending connection request for this client (Case 1)
                     pending_manager_id = None
