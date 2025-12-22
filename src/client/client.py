@@ -594,6 +594,10 @@ class Client:
     
     def _on_file_pdu(self, pdu: dict):
         """Xử lý FILE PDU từ server"""
+        print(f"[Client] ===== RECEIVED FILE PDU =====")
+        print(f"[Client] PDU type: {pdu.get('type')}")
+        print(f"[Client] PDU keys: {list(pdu.keys())}")
+        self.logger(f"[Client] 💾 Nhận FILE PDU từ server")
         self.file_transfer.handle_file_pdu(pdu)
         
     def _on_input_pdu_blocked(self, pdu: dict):
@@ -610,6 +614,9 @@ class Client:
     
     def send_file(self, target_id: str, filepath: str):
         """GUI gọi method này để gửi file"""
+        print(f"[Client] ===== SENDING FILE =====")
+        print(f"[Client] Target: {target_id}")
+        print(f"[Client] File: {filepath}")
         self.logger(f"[Client] Sending file to {target_id}: {filepath}")
         self.file_transfer.send_file(target_id, filepath)
     
@@ -1118,10 +1125,17 @@ class ClientWindow(QWidget):
     
     def on_file_received(self, filename: str, filepath: str):
         """File received callback"""
+        print(f"[ClientWindow] ===== FILE RECEIVED CALLBACK =====")
+        print(f"[ClientWindow] Filename: {filename}")
+        print(f"[ClientWindow] Filepath: {filepath}")
+        print(f"[ClientWindow] File exists: {os.path.exists(filepath)}")
+        
         if hasattr(self, 'file_transfer_panel'):
             self.file_transfer_panel.add_received_file(filename)
-        self.log_message(f"[GUI] File received: {filename}")
-        QMessageBox.information(self, "File Received", f"Received file: {filename}")
+            print(f"[ClientWindow] Added to file transfer panel")
+        
+        self.log_message(f"[GUI] ✅ File received: {filename} at {filepath}")
+        QMessageBox.information(self, "File Received", f"Received file: {filename}\n\nSaved to: {filepath}")
     
     def closeEvent(self, event):
         """Xử lý sự kiện đóng cửa sổ"""

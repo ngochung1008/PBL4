@@ -517,13 +517,26 @@ class SessionManager(threading.Thread):
                     # Find receiver
                     receiver_id = None
                     receiver_type = None
-                    with self.lock:
-                        for cid, role in self.clients.items():
-                            username = self.authenticated_users.get(cid)
-                            if username == target_id or cid == target_id:
-                                receiver_id = cid
-                                receiver_type = role
-                                break
+                    
+                    # Special case: if target_id is "server", find any connected manager
+                    if target_id.lower() == "server":
+                        with self.lock:
+                            # Find first manager (prioritize manager viewing this client)
+                            for cid, role in self.clients.items():
+                                if role == ROLE_MANAGER:
+                                    receiver_id = cid
+                                    receiver_type = role
+                                    self.logger(f"[Server] Auto-selected manager {cid} for file transfer from {client_id}")
+                                    break
+                    else:
+                        # Normal case: find by username or client_id
+                        with self.lock:
+                            for cid, role in self.clients.items():
+                                username = self.authenticated_users.get(cid)
+                                if username == target_id or cid == target_id:
+                                    receiver_id = cid
+                                    receiver_type = role
+                                    break
                     
                     if not receiver_id:
                         self._send_control_pdu(client_id, f"{CMD_FILE_TRANSFER_ERROR}:Target not found")
