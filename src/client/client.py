@@ -24,6 +24,7 @@ from src.client.client_network.client_sender import ClientSender
 from src.client.client_input import ClientInputHandler
 from src.client.client_cursor import ClientCursorTracker
 from src.client.client_permissions import ClientPermissions
+from src.client.client_file_transfer import ClientFileTransfer
 
 # Import UI components
 from src.gui.ui_components import DARK_BG, CARD_BG, TEXT_LIGHT, SUBTEXT, SPOTIFY_GREEN
@@ -74,6 +75,8 @@ class Client:
         self.input_handler = ClientInputHandler(logger=self.logger)
         # Cursor tracking: Giảm FPS xuống 5 (đủ để thấy cursor di chuyển)
         self.cursor_tracker = ClientCursorTracker(self.network, fps=5, logger=self.logger)
+        # File Transfer: Khởi tạo module truyền file
+        self.file_transfer = ClientFileTransfer(self.sender, self.logger)
 
         self.screenshot_thread = None
         self.monitor_thread = None # [THÊM] Thread giám sát
@@ -106,9 +109,11 @@ class Client:
         
         # File transfer: chỉ admin và user mới được truyền file
         if self.permissions.can_transfer_file():
+            self.network.on_file_pdu = self._on_file_pdu
             self.network.on_file_ack = self.sender.handle_file_ack
             self.network.on_file_nak = self.sender.handle_file_nak
         else:
+            self.network.on_file_pdu = self._on_file_blocked
             self.network.on_file_ack = self._on_file_blocked
             self.network.on_file_nak = self._on_file_blocked
             
@@ -569,6 +574,24 @@ class Client:
         elif msg == "disable_remote_control":
             self.disable_remote_control()
         
+        # === Xử lý FILE TRANSFER COMMANDS ===
+        elif msg.startswith("file_transfer_start"):
+            # Format: "file_transfer_start:transfer_id"
+            self.file_transfer.handle_file_transfer_ack(msg)
+        elif msg.startswith("file_transfer_ack"):
+            # Format: "file_transfer_ack:chunk_num"
+            self.file_transfer.handle_file_transfer_ack(msg)
+        elif msg.startswith("file_transfer_complete"):
+            # Format: "file_transfer_complete:transfer_id"
+            self.file_transfer.handle_file_received(msg)
+        elif msg.startswith("file_transfer_error"):
+            # Format: "file_transfer_error:error_message"
+            self.logger(f"[Client] File transfer error: {msg}")
+    
+    def _on_file_pdu(self, pdu: dict):
+        """Xử lý FILE PDU từ server"""
+        self.file_transfer.handle_file_pdu(pdu)
+        
     def _on_input_pdu_blocked(self, pdu: dict):
         """Xử lý khi nhận input PDU nhưng không có quyền"""
         self.logger(f"[Client] CHẶN: Không có quyền nhận điều khiển từ xa (Role: {self.role})")
@@ -580,6 +603,11 @@ class Client:
         self.logger(f"[Client] CHẶN: Không có quyền truyền file (Role: {self.role})")
         # Gửi thông báo về server
         self.network.send_control_pdu(f"permission_denied:file_transfer|Role: {self.role}")
+    
+    def send_file(self, target_id: str, filepath: str):
+        """GUI gọi method này để gửi file"""
+        self.logger(f"[Client] Sending file to {target_id}: {filepath}")
+        self.file_transfer.send_file(target_id, filepath)
     
     def _on_disconnected(self):
         self.logger("[Client] _on_disconnected được gọi.")
@@ -765,11 +793,37 @@ class ClientWindow(QWidget):
         """)
         self.connect_btn.clicked.connect(self.toggle_client_service)
 
+        # --- File Transfer Button ---
+        self.file_transfer_btn = QPushButton("📁 File Transfer")
+        self.file_transfer_btn.setFixedHeight(38)
+        self.file_transfer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.file_transfer_btn.setEnabled(False)  # Disabled until connected
+        self.file_transfer_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #404040;
+                color: white;
+                border-radius: 8px;
+                font-weight: bold;
+            }}
+            QPushButton:hover:enabled {{
+                background-color: #505050;
+            }}
+            QPushButton:pressed:enabled {{
+                background-color: #303030;
+            }}
+            QPushButton:disabled {{
+                background-color: #282828;
+                color: #606060;
+            }}
+        """)
+        self.file_transfer_btn.clicked.connect(self.open_file_transfer_window)
+
         card_layout.addLayout(top_bar)
         card_layout.addWidget(ip_label)
         card_layout.addLayout(ip_row)
         card_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignLeft)
         card_layout.addWidget(self.connect_btn)
+        card_layout.addWidget(self.file_transfer_btn)
 
         # --- Device List ---
         list_label = QLabel("Danh sách ghép nối:")
@@ -940,6 +994,7 @@ class ClientWindow(QWidget):
                 }}
                 QPushButton:pressed {{ background-color: #C0392B; }}
             """)
+            self.file_transfer_btn.setEnabled(True)
             
             self.log_message("[GUI] Dịch vụ client đã được khởi động")
             
@@ -977,6 +1032,7 @@ class ClientWindow(QWidget):
             
             self.status_label.setText("Trạng thái: Đã ngắt kết nối")
             self.status_label.setStyleSheet(f"color: {SUBTEXT}; font-size: 10pt;")
+            self.file_transfer_btn.setEnabled(False)
             self.connect_btn.setText("Bắt đầu dịch vụ")
             self.connect_btn.setStyleSheet(f"""
                 QPushButton {{
@@ -997,6 +1053,71 @@ class ClientWindow(QWidget):
     def log_message(self, message):
         """Log messages từ backend service"""
         print(message)
+    
+    def open_file_transfer_window(self):
+        """Mở cửa sổ file transfer"""
+        if not self.is_service_running or not self.client_service:
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng kết nối dịch vụ client trước!")
+            return
+        
+        from src.client.gui.file_transfer_panel import ClientFileTransferPanel
+        
+        # Tạo file transfer window
+        self.file_transfer_window = QWidget()
+        self.file_transfer_window.setWindowTitle("File Transfer")
+        self.file_transfer_window.resize(600, 500)
+        self.file_transfer_window.setStyleSheet(f"background-color: {DARK_BG}; color: {TEXT_LIGHT};")
+        
+        layout = QVBoxLayout(self.file_transfer_window)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Title
+        title = QLabel("📁 File Transfer")
+        title.setStyleSheet("font-size: 16pt; font-weight: bold; padding: 10px;")
+        layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        # File transfer panel
+        self.file_transfer_panel = ClientFileTransferPanel()
+        layout.addWidget(self.file_transfer_panel)
+        
+        # Connect signals
+        self.file_transfer_panel.file_send_requested.connect(self.on_file_send_requested)
+        
+        # Setup file transfer callbacks
+        self.client_service.file_transfer.on_progress = self.on_file_send_progress
+        self.client_service.file_transfer.on_complete = self.on_file_send_complete
+        self.client_service.file_transfer.on_error = self.on_file_send_error
+        self.client_service.file_transfer.on_file_received = self.on_file_received
+        
+        self.file_transfer_window.show()
+    
+    def on_file_send_requested(self, target_id: str, filepath: str):
+        """GUI request to send file"""
+        if self.client_service:
+            self.client_service.send_file(target_id, filepath)
+    
+    def on_file_send_progress(self, progress: int):
+        """File send progress callback"""
+        if hasattr(self, 'file_transfer_panel'):
+            self.file_transfer_panel.update_progress(progress)
+    
+    def on_file_send_complete(self):
+        """File send complete callback"""
+        if hasattr(self, 'file_transfer_panel'):
+            self.file_transfer_panel.update_progress(100)
+        self.log_message("[GUI] File sent successfully!")
+    
+    def on_file_send_error(self, error_msg: str):
+        """File send error callback"""
+        QMessageBox.critical(self, "File Transfer Error", f"Failed to send file: {error_msg}")
+        self.log_message(f"[GUI] File send error: {error_msg}")
+    
+    def on_file_received(self, filename: str, filepath: str):
+        """File received callback"""
+        if hasattr(self, 'file_transfer_panel'):
+            self.file_transfer_panel.add_received_file(filename)
+        self.log_message(f"[GUI] File received: {filename}")
+        QMessageBox.information(self, "File Received", f"Received file: {filename}")
     
     def closeEvent(self, event):
         """Xử lý sự kiện đóng cửa sổ"""

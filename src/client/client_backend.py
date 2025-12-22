@@ -20,6 +20,7 @@ from src.client.client_screenshot import ClientScreenshot
 from src.client.client_input import ClientInputHandler
 from src.client.client_cursor import ClientCursorTracker
 from src.client.client_constants import CLIENT_ID, CA_FILE
+from src.client.client_file_transfer import ClientFileTransfer
 
 
 class ClientBackend:
@@ -49,6 +50,10 @@ class ClientBackend:
         self.sender = ClientSender(self.network)
         self.input_handler = ClientInputHandler(logger=self.logger)
         self.cursor_tracker = ClientCursorTracker(self.network, fps=30, logger=self.logger)
+        
+        # File Transfer
+        self.file_transfer = ClientFileTransfer(self.sender, None)
+        self._setup_file_transfer_callbacks()
 
         self.screenshot_thread = None
         self.monitor_thread = None
@@ -63,6 +68,7 @@ class ClientBackend:
         # Kết nối các callback
         self.network.on_input_pdu = self.input_handler.handle_input_pdu
         self.network.on_control_pdu = self._on_control_pdu
+        self.network.on_file_pdu = self._on_file_pdu
         self.network.on_file_ack = self.sender.handle_file_ack
         self.network.on_file_nak = self.sender.handle_file_nak
         self.network.on_disconnected = self._on_disconnected
@@ -249,6 +255,52 @@ class ClientBackend:
         elif msg == "request_refresh":
             if self.in_session:
                 self.screenshot.force_full_frame()
+        
+        # === Xử lý FILE TRANSFER COMMANDS ===
+        elif msg.startswith("file_transfer_start"):
+            # Format: "file_transfer_start:transfer_id"
+            self.file_transfer.handle_file_transfer_ack(msg)
+        elif msg.startswith("file_transfer_ack"):
+            # Format: "file_transfer_ack:chunk_num"
+            self.file_transfer.handle_file_transfer_ack(msg)
+        elif msg.startswith("file_transfer_complete"):
+            # Format: "file_transfer_complete:transfer_id"
+            self.file_transfer.handle_file_received(msg)
+        elif msg.startswith("file_transfer_error"):
+            # Format: "file_transfer_error:error_message"
+            self.logger(f"[ClientBackend] File transfer error: {msg}")
+    
+    def _on_file_pdu(self, pdu: dict):
+        """Xử lý FILE PDU từ server"""
+        self.file_transfer.handle_file_pdu(pdu)
+    
+    def _setup_file_transfer_callbacks(self):
+        """Setup file transfer callbacks"""
+        # Progress callback
+        def on_progress(progress):
+            self.logger(f"[ClientBackend] File send progress: {progress}%")
+        
+        # Complete callback
+        def on_complete():
+            self.logger("[ClientBackend] File send complete!")
+        
+        # Error callback
+        def on_error(error_msg):
+            self.logger(f"[ClientBackend] File send error: {error_msg}")
+        
+        # Received file callback
+        def on_file_received(filename, filepath):
+            self.logger(f"[ClientBackend] File received: {filename} at {filepath}")
+        
+        self.file_transfer.on_progress = on_progress
+        self.file_transfer.on_complete = on_complete
+        self.file_transfer.on_error = on_error
+        self.file_transfer.on_file_received = on_file_received
+    
+    def gui_send_file(self, target_id: str, filepath: str):
+        """GUI calls this to send file"""
+        self.logger(f"[ClientBackend] Sending file to {target_id}: {filepath}")
+        self.file_transfer.send_file(target_id, filepath)
         
     def _on_disconnected(self):
         self.logger("[ClientBackend] _on_disconnected được gọi.")

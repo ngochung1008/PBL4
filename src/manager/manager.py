@@ -225,10 +225,40 @@ class Manager(QObject):
         msg = pdu.get('message', '')
         print(f"[Manager] Control PDU từ client: {msg}")
         
-        # Kiểm tra xem có phải là security alert không
-        if isinstance(msg, str) and msg.startswith('security_alert:'):
-            print(f"[Manager] 🚨 Nhận được security alert: {msg}")
-            self.security_alert_received.emit(pdu)
+        # Xử lý file transfer commands
+        if isinstance(msg, str):
+            if msg.startswith('file_transfer_start:'):
+                # Server ACK - bắt đầu gửi file data
+                transfer_id = msg.split(':', 1)[1]
+                print(f"[Manager] 📤 Received file_transfer_start, sending file data...")
+                self.file_transfer.handle_file_transfer_ack(transfer_id)
+            
+            elif msg.startswith('file_transfer_ack:'):
+                # Progress update
+                parts = msg.split(':')
+                if len(parts) >= 3:
+                    transfer_id = parts[1]
+                    progress = int(parts[2])
+                    self.file_send_progress.emit(progress)
+            
+            elif msg.startswith('file_transfer_complete:'):
+                # Transfer completed
+                parts = msg.split(':', 2)
+                if len(parts) >= 3:
+                    transfer_id = parts[1]
+                    filename = parts[2]
+                    self.file_transfer.handle_transfer_complete(transfer_id, filename)
+            
+            elif msg.startswith('file_transfer_error:'):
+                # Transfer error
+                error = msg.split(':', 1)[1] if ':' in msg else 'Unknown error'
+                self.file_transfer.handle_transfer_error(error)
+            
+            # Kiểm tra xem có phải là security alert không
+            elif msg.startswith('security_alert:'):
+                print(f"[Manager] 🚨 Nhận được security alert: {msg}")
+                self.security_alert_received.emit(pdu)
+        
         elif isinstance(msg, bytes) and msg.startswith(b'security_alert:'):
             # Decode bytes nếu cần
             pdu['message'] = msg.decode('utf-8')

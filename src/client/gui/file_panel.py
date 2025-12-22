@@ -23,7 +23,8 @@ class FileTransferPanel(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.target_id = None  # Will be set to manager/client ID
+        self.target_id = "server"  # Client sends to server, which forwards to manager
+        self.received_files_dir = "src/client/file_transfer/received"
         self.init_ui()
     
     def init_ui(self):
@@ -167,11 +168,15 @@ class FileTransferPanel(QWidget):
         self.selected_file_path = None
         self.send_file_button.setEnabled(False)
     
-    def add_received_file(self, filename, file_path):
+    def add_received_file(self, filename, file_path=None):
         """Add received file to list"""
+        # If file_path not provided, construct from received_files_dir
+        if not file_path:
+            file_path = os.path.join(self.received_files_dir, filename)
+        
         item = QListWidgetItem(f"📄 {filename}")
         item.setData(Qt.ItemDataRole.UserRole, file_path)
-        self.received_files_list.addItem(item)
+        self.received_files_list.insertItem(0, item)  # Insert at top (newest first)
         self.status_label.show_success(f"Đã nhận: {filename}")
     
     def open_received_file(self):
