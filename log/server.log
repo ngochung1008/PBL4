@@ -762,3 +762,15 @@
 2025-12-23 03:31:38,314 - mysql.connector - INFO - package: mysql.connector.plugins
 2025-12-23 03:31:38,315 - mysql.connector - INFO - plugin_name: caching_sha2_password
 2025-12-23 03:31:38,316 - mysql.connector - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2025-12-23 07:15:26,805 - src.server.server - INFO - ================================================================================
+2025-12-23 07:15:26,817 - src.server.server - INFO - Starting Unified Server
+2025-12-23 07:15:26,882 - src.server.server - INFO - ================================================================================
+2025-12-23 07:15:26,931 - src.server.server - INFO - TLS enabled - Using certificate: src/server.crt
+2025-12-23 07:15:26,961 - src.server.server - INFO - Starting Main Server at 0.0.0.0:5000
+2025-12-23 07:15:27,441 - src.server.server - INFO - Main Server started successfully
+2025-12-23 07:15:27,452 - src.server.server - INFO - Starting Auth Server in separate thread
+2025-12-23 07:15:27,522 - src.server.server - INFO - Auth Server thread started
+2025-12-23 07:15:27,574 - src.server.server - INFO - Server is running. Press Ctrl+C to stop.
+2025-12-23 07:15:44,568 - mysql.connector - INFO - package: mysql.connector.plugins
+2025-12-23 07:15:44,573 - mysql.connector - INFO - plugin_name: caching_sha2_password
+2025-12-23 07:15:44,574 - mysql.connector - INFO - AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin

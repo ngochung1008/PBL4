@@ -156,15 +156,15 @@ class ManageClientsWindow(QWidget):
         info_layout.setContentsMargins(10, 8, 10, 8)
         info_layout.setSpacing(6)
         self.lbl_username = QLabel("-")
-        self.lbl_email = QLabel("-")
-        self.lbl_fullname = QLabel("-")
+        # self.lbl_email = QLabel("-")
+        # self.lbl_fullname = QLabel("-")
 
-        for lbl in [self.lbl_username, self.lbl_email, self.lbl_fullname]:
+        for lbl in [self.lbl_username]:
             lbl.setStyleSheet(f"color: {TEXT_LIGHT}; font-size: 10pt;")
 
         info_layout.addRow("Username:", self.lbl_username)
-        info_layout.addRow("Email:", self.lbl_email)
-        info_layout.addRow("IP:", self.lbl_fullname)
+        # info_layout.addRow("Email:", self.lbl_email)
+        # info_layout.addRow("IP:", self.lbl_fullname)
         sidebar_layout.addWidget(self.info_frame)
 
         # Label trạng thái ngay dưới khung info
@@ -356,8 +356,8 @@ class ManageClientsWindow(QWidget):
     def show_client_info(self, index):
         if index < 0:
             self.lbl_username.setText("-")
-            self.lbl_email.setText("-")
-            self.lbl_fullname.setText("-")
+            # self.lbl_email.setText("-")
+            # self.lbl_fullname.setText("-")
             self.lbl_status.setText("Status: -")
             self.selected_client_id = None
             return
@@ -390,8 +390,8 @@ class ManageClientsWindow(QWidget):
         if index >= len(client_connected_list):
             print(f"[WARN] Client index {index} out of range. Client đã disconnect.")
             self.lbl_username.setText(name)
-            self.lbl_email.setText("N/A")
-            self.lbl_fullname.setText("N/A")
+            # self.lbl_email.setText("N/A")
+            # self.lbl_fullname.setText("N/A")
             self.lbl_status.setStyleSheet("font-size: 11pt; font-weight: bold; color: gray;")
             self.lbl_status.setText("Status: Disconnected")
             return
@@ -411,13 +411,13 @@ class ManageClientsWindow(QWidget):
         # Hiển thị thông tin
         if data:
             self.lbl_username.setText(name)
-            self.lbl_email.setText(data[4])
-            self.lbl_fullname.setText(data[3])
+            # self.lbl_email.setText(data[4])
+            # self.lbl_fullname.setText(data[3])
         else:
             # Không có profile từ Auth Server
             self.lbl_username.setText(name)
-            self.lbl_email.setText("N/A")
-            self.lbl_fullname.setText("N/A")
+            # self.lbl_email.setText("N/A")
+            # self.lbl_fullname.setText("N/A")
         
         # Status dựa trên Main Server connection, KHÔNG phải Auth Server
         if is_connected_to_main_server:
