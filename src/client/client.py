@@ -25,6 +25,7 @@ from src.client.client_input import ClientInputHandler
 from src.client.client_cursor import ClientCursorTracker
 from src.client.client_permissions import ClientPermissions
 from src.client.client_file_transfer import ClientFileTransfer
+from src.client.ai_monitor import AIMonitor
 
 # Import UI components
 from src.gui.ui_components import DARK_BG, CARD_BG, TEXT_LIGHT, SUBTEXT, SPOTIFY_GREEN
@@ -77,9 +78,18 @@ class Client:
         self.cursor_tracker = ClientCursorTracker(self.network, fps=5, logger=self.logger)
         # File Transfer: Khởi tạo module truyền file
         self.file_transfer = ClientFileTransfer(self.sender, self.logger)
+        
+        # AI Monitor: Giám sát màn hình bằng AI
+        self.ai_monitor = AIMonitor(
+            screenshot_module=self.screenshot,
+            send_alert_callback=self._send_ai_alert,
+            send_screenshot_callback=self._send_violation_screenshot,
+            logger=self.logger
+        )
 
         self.screenshot_thread = None
         self.monitor_thread = None # [THÊM] Thread giám sát
+        self.ai_monitor_running = False  # [THÊM] Flag AI monitor
         self.keylogger_thread = None  # [THÊM] Thread keylogger
         self.keylogger_running = False  # [THÊM] Flag keylogger
         self.key_buffer = ""  # [THÊM] Buffer lưu keystroke
@@ -186,6 +196,14 @@ class Client:
         )
         self.window_tracker_thread.start()
         self.logger("[Client] Đã khởi động window tracker liên tục...")
+        
+        # 9. Khởi động AI Monitor (Giám sát màn hình bằng AI)
+        if self.permissions.is_monitored():
+            self.ai_monitor_running = True
+            self.ai_monitor.start()
+            self.logger("[Client] 🤖 Đã khởi động AI Monitor...")
+        else:
+            self.logger("[Client] 🤖 Bỏ qua AI Monitor (Role: admin - không bị giám sát)")
 
         self.logger("[Client] Đã khởi động toàn bộ dịch vụ.")
         return True
@@ -215,6 +233,11 @@ class Client:
         # Dừng window tracker
         self.window_tracker_running = False
         
+        # Dừng AI monitor
+        if self.ai_monitor_running:
+            self.ai_monitor.stop()
+            self.ai_monitor_running = False
+        
         self.sender.stop()
         self.network.stop() # Sẽ kích hoạt _on_disconnected
         
@@ -223,6 +246,55 @@ class Client:
         # Monitor thread là daemon nên sẽ tự tắt khi main thread tắt
             
         self.logger("[Client] Đã dừng.")
+    
+    # === AI Monitor Callbacks ===
+    def _send_ai_alert(self, alert_message: str):
+        """Gửi security alert từ AI monitor đến server"""
+        try:
+            self.network.send_control_pdu(alert_message)
+            self.logger(f"[Client] 🚨 Đã gửi AI alert: {alert_message[:50]}...")
+        except Exception as e:
+            self.logger(f"[Client] ❌ Lỗi gửi AI alert: {e}")
+    
+    def _send_violation_screenshot(self, image_bytes: bytes, class_name: str, confidence: float):
+        """
+        Gửi screenshot vi phạm đến server để lưu trữ
+        Gửi qua FILE channel với metadata để server lưu vào thư mục violations
+        """
+        try:
+            from datetime import datetime
+            import json
+            import struct
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Tạo metadata JSON
+            metadata = {
+                'type': 'violation_screenshot',
+                'class_name': class_name,
+                'confidence': confidence,
+                'timestamp': timestamp,
+                'username': self.username
+            }
+            metadata_json = json.dumps(metadata).encode('utf-8')
+            
+            # Format: [metadata_len(4 bytes)][metadata_json][image_data]
+            packet = struct.pack('>I', len(metadata_json)) + metadata_json + image_bytes
+            
+            # Gửi qua FILE channel
+            from src.common.network.pdu_builder import PDUBuilder
+            from src.client.client_constants import CHANNEL_FILE
+            
+            seq = self.network._next_seq()
+            # Sử dụng file_chunk PDU để gửi
+            file_pdu = PDUBuilder.build_file_chunk(seq, 0, packet)
+            self.network.send_mcs_pdu(CHANNEL_FILE, file_pdu)
+            
+            self.logger(f"[Client] 📸 Đã gửi violation screenshot: {class_name} ({len(image_bytes)} bytes)")
+        except Exception as e:
+            self.logger(f"[Client] ❌ Lỗi gửi violation screenshot: {e}")
+            import traceback
+            traceback.print_exc()
     
     # === Methods để bật/tắt screen sharing và remote control ===
     def enable_screen_sharing(self):

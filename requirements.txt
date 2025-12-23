@@ -10,3 +10,5 @@ pycryptodome
 
 # Network
 requests
+# AI Monitor (for screen classification)
+ultralytics

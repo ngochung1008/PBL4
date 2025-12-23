@@ -17,6 +17,7 @@ class FileTransferHandler:
         """
         Xử lý file data PDU từ sender
         Nhận các chunks của file và forward tới receiver
+        Hoặc xử lý violation screenshot từ AI Monitor
         """
         try:
             pdu_type = pdu.get("type", "")
@@ -27,6 +28,10 @@ class FileTransferHandler:
             if pdu_type == "file_chunk":
                 file_data = pdu.get("data", b"")  # Data đã được parse
                 print(f"[FileTransfer] file_chunk data size: {len(file_data) if file_data else 0}")
+                
+                # Kiểm tra xem có phải violation screenshot không
+                if FileTransferHandler._handle_violation_screenshot(session_manager, sender_id, file_data):
+                    return  # Đã xử lý violation, không cần xử lý file transfer
             else:
                 # Legacy format hoặc raw payload
                 file_data = pdu.get("_raw_payload")  # Raw bytes
@@ -162,5 +167,79 @@ class FileTransferHandler:
                     transfer_id = session_manager.pending_file_transfers[sender_id]['transfer_id']
                     session_manager.file_transfer_manager.fail_transfer(transfer_id, str(e))
                     del session_manager.pending_file_transfers[sender_id]
+    
+    @staticmethod
+    def _handle_violation_screenshot(session_manager, sender_id, file_data: bytes) -> bool:
+        """
+        Kiểm tra và xử lý violation screenshot từ AI Monitor
+        
+        Args:
+            session_manager: SessionManager instance
+            sender_id: ID của client gửi
+            file_data: Data từ file_chunk PDU
             
+        Returns:
+            bool: True nếu đã xử lý violation screenshot, False nếu không phải
+        """
+        try:
+            # File data format: [metadata_len(4 bytes)][metadata_json][image_data]
+            if len(file_data) < 4:
+                return False
+            
+            metadata_len = struct.unpack('>I', file_data[:4])[0]
+            
+            # Sanity check: metadata không quá lớn
+            if metadata_len > 10000 or metadata_len + 4 > len(file_data):
+                return False
+            
+            try:
+                metadata_json = file_data[4:4+metadata_len].decode('utf-8')
+                metadata = json.loads(metadata_json)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return False
+            
+            # Kiểm tra xem có phải violation screenshot không
+            if metadata.get('type') != 'violation_screenshot':
+                return False
+            
+            # Đây là violation screenshot - xử lý
+            print(f"[FileTransfer] 🚨 RECEIVED VIOLATION SCREENSHOT from {sender_id}")
+            print(f"[FileTransfer] Metadata: {metadata}")
+            
+            # Extract image data
+            image_data = file_data[4+metadata_len:]
+            
+            if len(image_data) == 0:
+                print(f"[FileTransfer] ⚠️ No image data in violation screenshot")
+                return True
+            
+            # Lấy thông tin từ metadata
+            class_name = metadata.get('class_name', 'unknown')
+            confidence = metadata.get('confidence', 0.0)
+            username = metadata.get('username') or session_manager.authenticated_users.get(sender_id, sender_id)
+            
+            # Lưu vào violation storage
+            try:
+                result = session_manager.violation_storage.save_violation(
+                    username=username,
+                    violation_type=class_name,
+                    confidence=confidence,
+                    image_data=image_data,
+                    additional_info={
+                        'ai_timestamp': metadata.get('timestamp'),
+                        'sender_id': sender_id
+                    }
+                )
+                if result:
+                    print(f"[FileTransfer] ✅ Saved violation screenshot: {result}")
+                else:
+                    print(f"[FileTransfer] ❌ Failed to save violation screenshot")
+            except Exception as save_error:
+                print(f"[FileTransfer] ❌ Error saving violation: {save_error}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"[FileTransfer] Error checking violation screenshot: {e}")
+            return False
             session_manager._send_control_pdu(sender_id, f"{CMD_FILE_TRANSFER_ERROR}:Server error")

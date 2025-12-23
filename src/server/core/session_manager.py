@@ -42,6 +42,9 @@ from src.server.core.control_session import ControlSession
 # Import Screenshot Storage
 from src.server.core.screenshot_storage import ScreenshotStorage
 
+# Import Violation Storage - Lưu screenshots vi phạm từ AI
+from src.server.core.violation_storage import ViolationStorage
+
 # Import File Transfer Manager
 from src.server.core.file_transfer_manager import FileTransferManager
 from src.server.core.file_transfer_handler import FileTransferHandler
@@ -91,6 +94,13 @@ class SessionManager(threading.Thread):
             base_path="screenshots",
             change_threshold=0  # 0 = Lưu mọi thay đổi, không cần kiểm tra ngưỡng
         )
+        
+        # Violation Storage - Lưu screenshots vi phạm từ AI Monitor
+        self.violation_storage = ViolationStorage(base_path="violations")
+        
+        # Pending violation screenshots - theo dõi screenshot vi phạm đang chờ nhận
+        # {client_id: {class_name, confidence, timestamp, size}}
+        self.pending_violations = {}
         
         # File Transfer Manager - Quản lý truyền file
         self.file_transfer_manager = FileTransferManager()
@@ -267,14 +277,40 @@ class SessionManager(threading.Thread):
                     # Lấy username của client từ authenticated_users
                     client_username = self.authenticated_users.get(client_id)
                     if client_username:
-                        # Lưu screenshot (không block thread chính)
-                        try:
-                            result = self.screenshot_storage.save_screenshot_from_raw(client_username, raw_payload)
-                            # Chỉ log khi lưu thành công hoặc có lỗi
-                            if result:
-                                print(f"[SessionManager] ✅ Saved {pdu_type}: {result}")
-                        except Exception as e:
-                            print(f"[SessionManager] ❌ ERROR saving screenshot for {client_username}: {e}")
+                        # Kiểm tra xem có pending violation screenshot không
+                        pending_violation = None
+                        with self.lock:
+                            pending_violation = self.pending_violations.pop(client_id, None)
+                        
+                        if pending_violation:
+                            # Đây là violation screenshot - lưu vào thư mục violations
+                            try:
+                                # Extract JPEG data từ raw_payload
+                                jpeg_data = self._extract_jpeg_from_pdu(raw_payload, pdu_type)
+                                if jpeg_data:
+                                    result = self.violation_storage.save_violation(
+                                        username=client_username,
+                                        violation_type=pending_violation['class_name'],
+                                        confidence=pending_violation['confidence'],
+                                        image_data=jpeg_data,
+                                        additional_info={
+                                            'ai_timestamp': pending_violation['timestamp'],
+                                            'pdu_type': pdu_type
+                                        }
+                                    )
+                                    if result:
+                                        print(f"[ViolationStorage] 🚨 Saved violation screenshot: {result}")
+                            except Exception as e:
+                                print(f"[ViolationStorage] ❌ Error saving violation: {e}")
+                        else:
+                            # Lưu screenshot thông thường
+                            try:
+                                result = self.screenshot_storage.save_screenshot_from_raw(client_username, raw_payload)
+                                # Chỉ log khi lưu thành công hoặc có lỗi
+                                if result:
+                                    print(f"[SessionManager] ✅ Saved {pdu_type}: {result}")
+                            except Exception as e:
+                                print(f"[SessionManager] ❌ ERROR saving screenshot for {client_username}: {e}")
                 
                 with self.lock:
                     # 1. Broadcast tới tất cả viewers (nếu có)
@@ -644,6 +680,35 @@ class SessionManager(threading.Thread):
                             self._send_control_pdu(client_id, f"{CMD_SESSION_STARTED}:{target_username}")
                 except IndexError:
                     pass
+            
+            # 10. Xử lý VIOLATION SCREENSHOT (từ AI Monitor)
+            elif msg.startswith("violation_screenshot:"):
+                # Format: "violation_screenshot:class_name:confidence:timestamp:size"
+                try:
+                    parts = msg.split(":")
+                    if len(parts) >= 5:
+                        _, class_name, confidence_str, timestamp, size_str = parts[:5]
+                        confidence = float(confidence_str)
+                        size = int(size_str)
+                        
+                        # Lưu pending violation để chờ nhận screenshot data
+                        username = self.authenticated_users.get(client_id, client_id)
+                        with self.lock:
+                            self.pending_violations[client_id] = {
+                                'class_name': class_name,
+                                'confidence': confidence,
+                                'timestamp': timestamp,
+                                'size': size,
+                                'username': username
+                            }
+                        print(f"[ViolationStorage] 📸 Pending violation from {username}: {class_name} ({confidence*100:.1f}%)")
+                except Exception as e:
+                    print(f"[ViolationStorage] Error parsing violation_screenshot: {e}")
+            
+            # 11. Xử lý SECURITY ALERT (forward đến tất cả managers)
+            elif msg.startswith("security_alert:"):
+                # Forward security alert từ client đến tất cả managers đang online
+                self._forward_security_alert_to_managers(client_id, pdu)
 
         except Exception as e:
             print(f"[SessionManager] Logic Error: {e}")
@@ -697,6 +762,93 @@ class SessionManager(threading.Thread):
         
         # Client rảnh trở lại -> Cập nhật list
         self._broadcast_client_list()
+    
+    # =========================================================================
+    # HELPER METHODS CHO VIOLATION STORAGE VÀ SECURITY ALERTS
+    # =========================================================================
+    
+    def _extract_jpeg_from_pdu(self, raw_payload: bytes, pdu_type: str) -> bytes:
+        """
+        Extract JPEG data từ raw PDU payload
+        
+        Args:
+            raw_payload: Raw bytes của PDU
+            pdu_type: "full" hoặc "rect"
+        
+        Returns:
+            bytes: JPEG data hoặc None nếu lỗi
+        """
+        try:
+            import struct
+            
+            # PDU Header format: seq(4) + timestamp(8) + type(2) + flags(2) = 16 bytes
+            SHARE_HDR_SIZE = 16
+            
+            if pdu_type == "full":
+                # FULL PDU: header(16) + width(2) + height(2) + quality(4) + reserved(4) + jpg_len(4) + jpg_data
+                # Total header = 16 + 12 = 28 bytes before jpg_len
+                if len(raw_payload) < SHARE_HDR_SIZE + 12:
+                    return None
+                    
+                jpg_len = struct.unpack(">I", raw_payload[SHARE_HDR_SIZE + 8:SHARE_HDR_SIZE + 12])[0]
+                jpg_start = SHARE_HDR_SIZE + 12
+                
+                if len(raw_payload) >= jpg_start + jpg_len:
+                    return raw_payload[jpg_start:jpg_start + jpg_len]
+                    
+            elif pdu_type == "rect":
+                # RECT PDU: header(16) + x(2) + y(2) + w(2) + h(2) + quality(4) + reserved(4) + jpg_len(4) + full_w(4) + full_h(4) + jpg_data
+                # Total header = 16 + 20 + 8 = 44 bytes before jpg_data
+                if len(raw_payload) < SHARE_HDR_SIZE + 20:
+                    return None
+                    
+                jpg_len = struct.unpack(">I", raw_payload[SHARE_HDR_SIZE + 16:SHARE_HDR_SIZE + 20])[0]
+                jpg_start = SHARE_HDR_SIZE + 20 + 8  # +8 for full_w and full_h
+                
+                if len(raw_payload) >= jpg_start + jpg_len:
+                    return raw_payload[jpg_start:jpg_start + jpg_len]
+                    
+        except Exception as e:
+            print(f"[SessionManager] Error extracting JPEG: {e}")
+        
+        return None
+    
+    def _forward_security_alert_to_managers(self, client_id: str, pdu: dict):
+        """
+        Forward security alert từ client đến tất cả managers đang online
+        
+        Args:
+            client_id: ID của client gửi alert
+            pdu: PDU chứa security alert
+        """
+        try:
+            # Lấy raw payload để forward
+            raw_payload = pdu.get("_raw_payload")
+            if not raw_payload:
+                return
+            
+            # Tìm tất cả managers online
+            manager_ids = []
+            with self.lock:
+                for cid, role in self.clients.items():
+                    if role == ROLE_MANAGER:
+                        manager_ids.append(cid)
+            
+            if not manager_ids:
+                print(f"[SecurityAlert] No managers online to receive alert from {client_id}")
+                return
+            
+            # Build MCS frame và forward đến tất cả managers
+            mcs_frame = MCSLite.build(CHANNEL_CONTROL, raw_payload)
+            
+            for manager_id in manager_ids:
+                self.broadcaster.enqueue(manager_id, mcs_frame)
+            
+            username = self.authenticated_users.get(client_id, client_id)
+            print(f"[SecurityAlert] 🚨 Forwarded alert from {username} to {len(manager_ids)} managers")
+            
+        except Exception as e:
+            print(f"[SecurityAlert] Error forwarding alert: {e}")
 
     # Lấy danh sách các Client (cả rảnh và bận)
     def _get_available_clients(self):
